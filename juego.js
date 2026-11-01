@@ -81,6 +81,22 @@ function genWorld(seed) {
   for (let i = 0; i < 3500; i++) decos.push({ x: R(0, WORLD), y: R(0, WORLD), k: Math.floor(rnd() * 4), a: rnd() * 6.28 });
 
   solids = [...trees, ...rocks, ...lakes, ...tents, { x: CAMP.x, y: CAMP.y, r: 26 }];
+  buildMap();
+}
+
+// Mapa pequeño: se dibuja una sola vez y luego solo se le ponen encima el jugador y las banderas
+const MAP = 180;
+const mapCv = document.createElement('canvas');
+function buildMap() {
+  const k = MAP / WORLD, m = mapCv.getContext('2d');
+  mapCv.width = mapCv.height = MAP;
+  m.fillStyle = '#86ad60'; m.fillRect(0, 0, MAP, MAP);
+  m.fillStyle = 'rgba(35,75,30,0.45)';
+  for (const t of trees) { m.beginPath(); m.arc(t.x * k, t.y * k, t.canopy * k, 0, 7); m.fill(); }
+  m.fillStyle = '#3f86b3';
+  for (const l of lakes) { m.beginPath(); m.arc(l.x * k, l.y * k, l.r * k, 0, 7); m.fill(); }
+  m.fillStyle = '#b39b62'; m.beginPath(); m.arc(CAMP.x * k, CAMP.y * k, 230 * k, 0, 7); m.fill();
+  m.fillStyle = '#e8692a'; m.beginPath(); m.arc(CAMP.x * k, CAMP.y * k, 2.5, 0, 7); m.fill();
 }
 
 function placeStick() {
@@ -265,18 +281,20 @@ function update(dt) {
 }
 
 // ---------- Dibujo ----------
-let cam = { x: 0, y: 0 };
-const onScreen = (x, y, r) => x + r > cam.x && x - r < cam.x + W && y + r > cam.y && y - r < cam.y + H;
+// ZOOM: qué tan cerca está la cámara (más alto = se ve menos bosque a la vez)
+const ZOOM = 1.6;
+let cam = { x: 0, y: 0 }, VW = 0, VH = 0; // VW/VH = tamaño de la vista en unidades del mundo
+const onScreen = (x, y, r) => x + r > cam.x && x - r < cam.x + VW && y + r > cam.y && y - r < cam.y + VH;
 
 function drawGround() {
   ctx.fillStyle = '#4f7a3a';
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, VW, VH);
   // Borde del mundo
   ctx.fillStyle = '#2a3f20';
-  if (cam.x < 0) ctx.fillRect(0, 0, -cam.x, H);
-  if (cam.y < 0) ctx.fillRect(0, 0, W, -cam.y);
-  if (cam.x + W > WORLD) ctx.fillRect(WORLD - cam.x, 0, W, H);
-  if (cam.y + H > WORLD) ctx.fillRect(0, WORLD - cam.y, W, H);
+  if (cam.x < 0) ctx.fillRect(0, 0, -cam.x, VH);
+  if (cam.y < 0) ctx.fillRect(0, 0, VW, -cam.y);
+  if (cam.x + VW > WORLD) ctx.fillRect(WORLD - cam.x, 0, VW, VH);
+  if (cam.y + VH > WORLD) ctx.fillRect(0, WORLD - cam.y, VW, VH);
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
   // Claro del campamento
@@ -472,8 +490,8 @@ function drawNight() {
     g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     dctx.fillStyle = g; dctx.beginPath(); dctx.arc(x, y, r, 0, 7); dctx.fill();
   };
-  hole(player.x - cam.x, player.y - cam.y, 150);
-  if (fire.fuel > 0) hole(CAMP.x - cam.x, CAMP.y - cam.y, 120 + fire.fuel * 2.2 + Math.sin(performance.now() / 90) * 6);
+  hole((player.x - cam.x) * ZOOM, (player.y - cam.y) * ZOOM, 150 * ZOOM);
+  if (fire.fuel > 0) hole((CAMP.x - cam.x) * ZOOM, (CAMP.y - cam.y) * ZOOM, (120 + fire.fuel * 2.2 + Math.sin(performance.now() / 90) * 6) * ZOOM);
   ctx.drawImage(darkCv, 0, 0);
 }
 
@@ -515,14 +533,14 @@ function drawHUD() {
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(cx - 74, cy + R + 12, 148, 24, 8); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif';
-  ctx.fillText(`${tg.name} · ${Math.round(dist(player, tg) / 10)} m`, cx, cy + R + 29);
+  ctx.fillText('Ve a: ' + tg.name, cx, cy + R + 29);
   ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, cy + R + 52);
 
   // Aviso de interacción
   const n = nearInteract();
   if (n) {
     ctx.font = 'bold 15px sans-serif';
-    const w = ctx.measureText(n.label).width + 20, x = player.x - cam.x, y = player.y - cam.y - 46;
+    const w = ctx.measureText(n.label).width + 20, x = (player.x - cam.x) * ZOOM, y = (player.y - cam.y) * ZOOM - 50;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(x - w / 2, y - 18, w, 26, 8); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText(n.label, x, y);
   }
@@ -538,6 +556,32 @@ function drawHUD() {
   });
   ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'left';
   ctx.fillText('WASD/flechas: caminar · Shift: correr · E: usar · F: comer · P: pausa', 14, H - 12);
+  drawMinimap();
+}
+
+// Minimapa (abajo a la derecha): tú eres la flecha amarilla; la bandera que sigue parpadea en rojo
+function drawMinimap() {
+  const x0 = W - MAP - 18, y0 = H - MAP - 18, k = MAP / WORLD;
+  ctx.fillStyle = '#d8cfb4'; roundRect(x0 - 6, y0 - 6, MAP + 12, MAP + 12, 10); ctx.fill();
+  ctx.drawImage(mapCv, x0, y0);
+  const blink = Math.floor(performance.now() / 400) % 2;
+  const next = flags.find(f => !f.done);
+  for (const f of flags) {
+    if (!f.done && f !== next) continue; // las que faltan no salen hasta que te toquen
+    ctx.fillStyle = f.done ? '#3fae4a' : blink ? '#fff' : '#e0402c';
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x0 + f.x * k, y0 + f.y * k, 4.5, 0, 7); ctx.fill(); ctx.stroke();
+  }
+  if (!next && blink) { // ya están todas: parpadea el campamento
+    ctx.strokeStyle = '#e0402c'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x0 + CAMP.x * k, y0 + CAMP.y * k, 8, 0, 7); ctx.stroke();
+  }
+  ctx.save(); ctx.translate(x0 + player.x * k, y0 + player.y * k); ctx.rotate(player.ang);
+  ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-2, 0); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#333'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('N', x0 + 5, y0 + 13);
 }
 
 function drawRain() {
@@ -556,7 +600,9 @@ function screen(title, lines) {
 }
 
 function drawWorld() {
-  cam.x = player.x - W / 2; cam.y = player.y - H / 2;
+  VW = W / ZOOM; VH = H / ZOOM;
+  cam.x = player.x - VW / 2; cam.y = player.y - VH / 2;
+  ctx.save(); ctx.scale(ZOOM, ZOOM);
   drawGround();
   ctx.save(); ctx.translate(-cam.x, -cam.y);
   for (const s of sticks) if (onScreen(s.x, s.y, 14)) drawStick(s);
@@ -568,6 +614,7 @@ function drawWorld() {
   for (const t of trees) if (onScreen(t.x, t.y, 20)) { ctx.fillStyle = '#4a3220'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, 7); ctx.fill(); }
   drawPlayer();
   for (const t of trees) if (onScreen(t.x, t.y, t.canopy + 14)) drawTreeTop(t);
+  ctx.restore();
   ctx.restore();
   drawNight();
   if (rain) drawRain();
