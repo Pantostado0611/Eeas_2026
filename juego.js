@@ -94,7 +94,8 @@ function placeStick() {
 // ---------- Estado ----------
 const DAY_LEN = 240; // segundos por día completo
 let state = 'title';
-let player, fire, time, day, energy, wood, food, rain, rainTimer, nextRain, toasts, playTime, drops;
+let player, fire, time, day, energy, wood, food, rain, rainTimer, nextRain, playTime;
+let toasts = [], drops = [];
 
 function startGame() {
   player = null;
