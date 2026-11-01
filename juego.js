@@ -25,7 +25,12 @@ const WORLD = 4000;
 const CAMP = { x: WORLD / 2, y: WORLD / 2 };
 const NUM_FLAGS = 5;
 
-let rnd, trees, rocks, bushes, sticks, lakes, flags, tents, decos, solids;
+let rnd, trees, rocks, bushes, sticks, lakes, flags, tents, decos, solids, landmarks;
+
+// Dirección de b vista desde a (el norte es arriba)
+const DIRS = ['este', 'sureste', 'sur', 'suroeste', 'oeste', 'noroeste', 'norte', 'noreste'];
+const dirName = (a, b) => DIRS[(Math.round(Math.atan2(b.y - a.y, b.x - a.x) / (Math.PI / 4)) + 8) % 8];
+const conArt = (prep, l) => (prep + ' ' + l.art + ' ' + l.name).replace('de el ', 'del ').replace('a el ', 'al ');
 
 function free(x, y, r, list, pad) {
   for (const o of list) if (Math.hypot(o.x - x, o.y - y) < o.r + r + pad) return false;
@@ -51,7 +56,40 @@ function genWorld(seed) {
     const l = { x: R(300, WORLD - 300), y: R(300, WORLD - 300), r: R(130, 240) };
     if (free(l.x, l.y, l.r, keep, 40) && free(l.x, l.y, l.r, lakes, 150)) lakes.push(l);
   }
-  const blocked = [...keep, ...lakes];
+
+  // Lugares característicos: salen con su nombre en el mapa grande
+  const lakeNames = [['el', 'Lago Espejo'], ['la', 'Laguna Azul'], ['el', 'Lago de las Ranas'], ['el', 'Charco del Oso']];
+  landmarks = lakes.map((l, i) => ({ art: lakeNames[i][0], name: lakeNames[i][1], kind: 'lago', x: l.x, y: l.y, r: l.r, zone: l.r + 90 }));
+  landmarks.push({ art: 'el', name: 'Campamento', kind: 'camp', x: CAMP.x, y: CAMP.y, r: 230, zone: 230 });
+  const spots = [['el', 'Claro de las Flores', 'claro', 170], ['la', 'Roca del Águila', 'roca', 90], ['el', 'Árbol Gigante', 'arbol', 110], ['el', 'Pinar Oscuro', 'pinar', 380]];
+  for (const [art, name, kind, r] of spots) {
+    for (let tries = 0; tries < 400; tries++) {
+      const p = { art, name, kind, x: R(350, WORLD - 350), y: R(350, WORLD - 350), r, zone: r + 40 };
+      const ok = kind === 'pinar'
+        ? free(p.x, p.y, r * 0.4, landmarks, 100)
+        : free(p.x, p.y, r, keep, 40) && free(p.x, p.y, r, landmarks, 120);
+      if (ok) { landmarks.push(p); break; }
+    }
+  }
+  const lm = k => landmarks.find(l => l.kind === k);
+  const blocked = [...keep, ...lakes, ...landmarks.filter(l => ['claro', 'roca', 'arbol'].includes(l.kind))];
+  const roca = lm('roca'), arbol = lm('arbol'), pinar = lm('pinar'), claro = lm('claro');
+  if (roca) for (const [dx, dy, r] of [[0, 0, 55], [-55, 32, 38], [50, 38, 34], [12, -58, 30]]) rocks.push({ x: roca.x + dx, y: roca.y + dy, r, seed: rnd() });
+  if (arbol) trees.push({ x: arbol.x, y: arbol.y, r: 30, canopy: 135, pine: false, shade: 0.3 });
+
+  // Pista de cada bandera según el lugar conocido más cercano
+  for (const f of flags) {
+    let best = null, bd = Infinity;
+    for (const l of landmarks) {
+      if (l.kind === 'camp') continue;
+      const d = Math.hypot(f.x - l.x, f.y - l.y) - l.r;
+      if (d < bd) { bd = d; best = l; }
+    }
+    if (!best) f.hint = '';
+    else if (bd < 0) f.hint = conArt('en', best); // dentro del pinar
+    else if (bd < 160) f.hint = conArt('junto a', best);
+    else f.hint = 'al ' + dirName(best, f) + ' ' + conArt('de', best);
+  }
 
   // Tiendas del campamento
   for (let i = 0; i < 3; i++) {
@@ -61,7 +99,9 @@ function genWorld(seed) {
 
   // Árboles
   for (let tries = 0; trees.length < 950 && tries < 6000; tries++) {
-    const t = { x: R(40, WORLD - 40), y: R(40, WORLD - 40), r: 14, canopy: R(38, 66), pine: rnd() < 0.45, shade: rnd() };
+    const x = R(40, WORLD - 40), y = R(40, WORLD - 40);
+    const inPinar = pinar && Math.hypot(x - pinar.x, y - pinar.y) < pinar.r;
+    const t = { x, y, r: 14, canopy: R(38, 66), pine: inPinar || rnd() < 0.45, shade: inPinar ? 0 : rnd() };
     if (free(t.x, t.y, 30, blocked, 0) && free(t.x, t.y, 0, trees, 34)) trees.push(t);
   }
   // Rocas
@@ -79,24 +119,51 @@ function genWorld(seed) {
   for (let i = 0; i < 260; i++) placeStick();
   // Decoración del suelo (pasto, flores, hojas)
   for (let i = 0; i < 3500; i++) decos.push({ x: R(0, WORLD), y: R(0, WORLD), k: Math.floor(rnd() * 4), a: rnd() * 6.28 });
+  if (claro) for (let i = 0; i < 280; i++) {
+    const a = rnd() * 6.28, d = Math.sqrt(rnd()) * claro.r;
+    decos.push({ x: claro.x + Math.cos(a) * d, y: claro.y + Math.sin(a) * d, k: 2, a: rnd() * 6.28 });
+  }
 
   solids = [...trees, ...rocks, ...lakes, ...tents, { x: CAMP.x, y: CAMP.y, r: 26 }];
   buildMap();
 }
 
-// Mapa pequeño: se dibuja una sola vez y luego solo se le ponen encima el jugador y las banderas
-const MAP = 180;
+// Mapa del bosque: se dibuja una sola vez (sin jugador ni banderas, como un mapa de papel).
+// MAP = tamaño del minimapa en pantalla; MAP_RES = resolución, para que el mapa grande se vea nítido
+const MAP = 180, MAP_RES = 700;
 const mapCv = document.createElement('canvas');
 function buildMap() {
-  const k = MAP / WORLD, m = mapCv.getContext('2d');
-  mapCv.width = mapCv.height = MAP;
-  m.fillStyle = '#86ad60'; m.fillRect(0, 0, MAP, MAP);
-  m.fillStyle = 'rgba(35,75,30,0.45)';
-  for (const t of trees) { m.beginPath(); m.arc(t.x * k, t.y * k, t.canopy * k, 0, 7); m.fill(); }
-  m.fillStyle = '#3f86b3';
-  for (const l of lakes) { m.beginPath(); m.arc(l.x * k, l.y * k, l.r * k, 0, 7); m.fill(); }
-  m.fillStyle = '#b39b62'; m.beginPath(); m.arc(CAMP.x * k, CAMP.y * k, 230 * k, 0, 7); m.fill();
-  m.fillStyle = '#e8692a'; m.beginPath(); m.arc(CAMP.x * k, CAMP.y * k, 2.5, 0, 7); m.fill();
+  const k = MAP_RES / WORLD, m = mapCv.getContext('2d');
+  mapCv.width = mapCv.height = MAP_RES;
+  const circle = (x, y, r, col) => { m.fillStyle = col; m.beginPath(); m.arc(x * k, y * k, r * k, 0, 7); m.fill(); };
+  m.fillStyle = '#86ad60'; m.fillRect(0, 0, MAP_RES, MAP_RES);
+  for (const l of landmarks) {
+    if (l.kind === 'pinar') circle(l.x, l.y, l.r, '#5d8a4a');
+    if (l.kind === 'claro') circle(l.x, l.y, l.r, '#b9d482');
+  }
+  for (const t of trees) circle(t.x, t.y, t.canopy, t.pine ? 'rgba(25,65,35,0.5)' : 'rgba(45,85,30,0.45)');
+  for (const l of lakes) { circle(l.x, l.y, l.r + 12, '#8f8259'); circle(l.x, l.y, l.r, '#3f86b3'); }
+  for (const k2 of rocks) circle(k2.x, k2.y, k2.r, '#8b8d88');
+  circle(CAMP.x, CAMP.y, 230, '#b39b62');
+  for (const t of tents) circle(t.x, t.y, 34, t.color);
+  circle(CAMP.x, CAMP.y, 30, '#e8692a');
+  const arbol = landmarks.find(l => l.kind === 'arbol');
+  if (arbol) { circle(arbol.x, arbol.y, 135, '#2d5a26'); circle(arbol.x - 30, arbol.y - 30, 60, '#3f7a33'); }
+  m.strokeStyle = 'rgba(60,40,20,0.6)'; m.lineWidth = 3; m.strokeRect(1.5, 1.5, MAP_RES - 3, MAP_RES - 3);
+}
+
+// Dibuja el mapa en pantalla; con nombres solo cuando es grande (en chico no caben)
+function drawMapAt(x0, y0, size, labels) {
+  ctx.drawImage(mapCv, x0, y0, size, size);
+  if (!labels) return;
+  const k = size / WORLD;
+  ctx.font = `bold ${Math.round(size / 42)}px sans-serif`; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+  for (const l of landmarks) {
+    const x = clamp(x0 + l.x * k, x0 + 70, x0 + size - 70);
+    const y = Math.max(y0 + 18, y0 + l.y * k - (l.kind === 'pinar' ? 0 : l.r * k + 8));
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,250,235,0.9)'; ctx.strokeText(l.name, x, y);
+    ctx.fillStyle = '#3a2a14'; ctx.fillText(l.name, x, y);
+  }
 }
 
 function placeStick() {
@@ -121,7 +188,7 @@ function startGame() {
   time = 0.05; day = 1;
   energy = 100; wood = 0; food = 0;
   rain = false; rainTimer = 0; nextRain = 70 + Math.random() * 60;
-  toasts = []; playTime = 0; drops = [];
+  toasts = []; playTime = 0; drops = []; mapOpen = false;
   state = 'play';
   toast('Encuentra las 5 banderas con la brújula. ¡No dejes que se apague la fogata!', 6);
 }
@@ -140,7 +207,7 @@ const isNight = () => darkness() > 0.5;
 
 function target() {
   const f = flags.find(f => !f.done);
-  return f ? { x: f.x, y: f.y, name: 'Bandera ' + f.n } : { x: CAMP.x, y: CAMP.y, name: 'Campamento' };
+  return f ? { x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: f.hint } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
 }
 
 // ---------- Entrada ----------
@@ -155,9 +222,15 @@ addEventListener('keydown', e => {
     if (k === 'e') interact();
     if (k === 'f') eat();
     if (k === 'p') state = 'pause';
+    if (k === 'm') mapOpen = !mapOpen;
   } else if (state === 'pause' && k === 'p') state = 'play';
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+cv.addEventListener('click', e => {
+  if (state !== 'play') return;
+  const { x, y } = miniRect();
+  if (mapOpen || (e.clientX >= x && e.clientX <= x + MAP && e.clientY >= y && e.clientY <= y + MAP)) mapOpen = !mapOpen;
+});
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') state = 'pause'; });
 
 function nearInteract() {
@@ -195,7 +268,7 @@ function eat() {
 function update(dt) {
   for (const t of toasts) t.t -= dt;
   toasts = toasts.filter(t => t.t > 0);
-  if (state !== 'play') return;
+  if (state !== 'play' || mapOpen) return;
   playTime += dt;
 
   // Tiempo y días
@@ -236,6 +309,11 @@ function update(dt) {
   }
   player.x = clamp(player.x, 30, WORLD - 30);
   player.y = clamp(player.y, 30, WORLD - 30);
+
+  // Al entrar a un lugar conocido te dice su nombre
+  const place = landmarks.find(l => Math.hypot(player.x - l.x, player.y - l.y) < l.zone);
+  const pn = place ? place.name : null;
+  if (pn !== player.place) { if (pn && player.place !== undefined) toast('📍 ' + pn); player.place = pn; }
 
   // Ramas: se recogen solas al pasar
   for (let i = sticks.length - 1; i >= 0; i--) {
@@ -298,6 +376,12 @@ function drawGround() {
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
   // Claro del campamento
+  for (const l of landmarks) {
+    if (l.kind !== 'claro' && l.kind !== 'pinar') continue;
+    if (!onScreen(l.x, l.y, l.r)) continue;
+    ctx.fillStyle = l.kind === 'claro' ? '#64934a' : '#466f36';
+    ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, 7); ctx.fill();
+  }
   ctx.fillStyle = '#8a7a52';
   ctx.beginPath(); ctx.ellipse(CAMP.x, CAMP.y, 230, 210, 0, 0, 7); ctx.fill();
   ctx.fillStyle = '#9c8a5e';
@@ -531,10 +615,16 @@ function drawHUD() {
   ctx.restore();
   ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, 7); ctx.fill();
   ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(cx - 74, cy + R + 12, 148, 24, 8); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif';
-  ctx.fillText('Ve a: ' + tg.name, cx, cy + R + 29);
-  ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, cy + R + 52);
+  ctx.font = 'bold 13px sans-serif';
+  const pill = (text, y) => {
+    const w = ctx.measureText(text).width + 20, x = Math.min(cx - w / 2, W - 12 - w);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(x, y - 17, w, 24, 8); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText(text, x + w / 2, y);
+  };
+  pill('Ve a: ' + tg.name, cy + R + 29);
+  if (tg.hint) pill(tg.hint, cy + R + 57);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, cy + R + (tg.hint ? 84 : 56));
 
   // Aviso de interacción
   const n = nearInteract();
@@ -555,33 +645,35 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   });
   ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'left';
-  ctx.fillText('WASD/flechas: caminar · Shift: correr · E: usar · F: comer · P: pausa', 14, H - 12);
+  ctx.fillText('WASD/flechas: caminar · Shift: correr · E: usar · F: comer · M: mapa · P: pausa', 14, H - 12);
   drawMinimap();
 }
 
-// Minimapa (abajo a la derecha): tú eres la flecha amarilla; la bandera que sigue parpadea en rojo
+// Minimapa (abajo a la derecha). Como un mapa de papel: no marca dónde estás ni las banderas.
+// Con M o con un clic se hace grande.
+const miniRect = () => ({ x: W - MAP - 18, y: H - MAP - 18 });
 function drawMinimap() {
-  const x0 = W - MAP - 18, y0 = H - MAP - 18, k = MAP / WORLD;
+  const { x: x0, y: y0 } = miniRect();
   ctx.fillStyle = '#d8cfb4'; roundRect(x0 - 6, y0 - 6, MAP + 12, MAP + 12, 10); ctx.fill();
-  ctx.drawImage(mapCv, x0, y0);
-  const blink = Math.floor(performance.now() / 400) % 2;
-  const next = flags.find(f => !f.done);
-  for (const f of flags) {
-    if (!f.done && f !== next) continue; // las que faltan no salen hasta que te toquen
-    ctx.fillStyle = f.done ? '#3fae4a' : blink ? '#fff' : '#e0402c';
-    ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x0 + f.x * k, y0 + f.y * k, 4.5, 0, 7); ctx.fill(); ctx.stroke();
-  }
-  if (!next && blink) { // ya están todas: parpadea el campamento
-    ctx.strokeStyle = '#e0402c'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x0 + CAMP.x * k, y0 + CAMP.y * k, 8, 0, 7); ctx.stroke();
-  }
-  ctx.save(); ctx.translate(x0 + player.x * k, y0 + player.y * k); ctx.rotate(player.ang);
-  ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-2, 0); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.restore();
+  drawMapAt(x0, y0, MAP, false);
   ctx.fillStyle = '#333'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
   ctx.fillText('N', x0 + 5, y0 + 13);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(x0 + MAP / 2 - 52, y0 + MAP - 22, 104, 18, 6); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+  ctx.fillText('[M] agrandar', x0 + MAP / 2, y0 + MAP - 9);
+}
+
+// Mapa grande con los nombres de los lugares (el juego se pausa mientras lo ves)
+let mapOpen = false;
+function drawBigMap() {
+  ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, W, H);
+  const size = Math.min(W, H) - 110, x0 = (W - size) / 2, y0 = (H - size) / 2;
+  ctx.fillStyle = '#d8cfb4'; roundRect(x0 - 10, y0 - 10, size + 20, size + 20, 14); ctx.fill();
+  drawMapAt(x0, y0, size, true);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#c0392b'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('N ↑', x0 + 26, y0 + 26);
+  ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 20px sans-serif'; ctx.fillText('Mapa del bosque', W / 2, y0 - 20);
+  ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.fillText('M o clic para cerrar', W / 2, y0 + size + 32);
 }
 
 function drawRain() {
@@ -630,6 +722,7 @@ function draw() {
   }
   drawWorld();
   drawHUD();
+  if (mapOpen && state === 'play') drawBigMap();
   const mins = Math.floor(playTime / 60), secs = Math.floor(playTime % 60);
   if (state === 'pause') screen('Pausa', ['Pulsa P para seguir']);
   if (state === 'win') screen('¡Insignia de Explorador!', [`Encontraste las ${NUM_FLAGS} banderas y volviste al campamento.`, `Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', 'Pulsa ENTER para jugar otra vez']);
