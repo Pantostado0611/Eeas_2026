@@ -780,7 +780,7 @@ function drawHUD() {
   ctx.fillStyle = cat.color; ctx.beginPath(); ctx.arc(26, 152, 6, 0, 7); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.fillText(badge, 38, 157);
 
-  // Brújula: arriba es hacia donde miras, así que las letras giran contigo; la aguja roja apunta al objetivo
+  // Brújula: arriba es hacia donde miras, así que las letras giran contigo; la aguja roja apunta hacia donde miras
   const cx = W - 84, cy = 84, R = 62, tg = target();
   const view = a => a - player.ang - Math.PI / 2; // dirección del mundo -> ángulo en la brújula
   ctx.fillStyle = '#d8cfb4'; ctx.beginPath(); ctx.arc(cx, cy, R + 6, 0, 7); ctx.fill();
@@ -790,7 +790,7 @@ function drawHUD() {
   [['N', -Math.PI / 2], ['S', Math.PI / 2], ['E', 0], ['O', Math.PI]].forEach(([l, wa]) => { const a = view(wa); ctx.fillStyle = l === 'N' ? '#c0392b' : '#333'; ctx.fillText(l, cx + Math.cos(a) * (R - 13), cy + Math.sin(a) * (R - 13)); });
   for (let i = 0; i < 16; i++) { const a = view(i / 16 * 6.283); ctx.strokeStyle = '#8e7a4a'; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)); ctx.lineTo(cx + Math.cos(a) * (R - (i % 4 ? 7 : 1)), cy + Math.sin(a) * (R - (i % 4 ? 7 : 1))); ctx.stroke(); }
   ctx.fillStyle = '#8e7a4a'; ctx.beginPath(); ctx.moveTo(cx, cy - R - 9); ctx.lineTo(cx - 6, cy - R - 1); ctx.lineTo(cx + 6, cy - R - 1); ctx.fill(); // marca de "al frente"
-  const a = view(Math.atan2(tg.y - player.y, tg.x - player.x));
+  const a = view(player.ang); // la aguja apunta hacia donde miras (siempre arriba); las letras giran debajo
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(a);
   ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(R - 20, 0); ctx.lineTo(0, -6); ctx.lineTo(0, 6); ctx.fill();
   ctx.fillStyle = '#555'; ctx.beginPath(); ctx.moveTo(-(R - 26), 0); ctx.lineTo(0, -6); ctx.lineTo(0, 6); ctx.fill();
