@@ -24,6 +24,9 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const WORLD = 4000;
 const CAMP = { x: WORLD / 2, y: WORLD / 2 };
 const NUM_FLAGS = 5;
+const STEP = 20;        // unidades del mundo por cada paso (Rover)
+const CAMP_ZONE = 230;  // radio de la zona de acampado
+const TOL_STEPS = 5, TOL_DEG = 15; // margen permitido al marcar en la libreta
 
 let rnd, trees, rocks, bushes, sticks, lakes, flags, tents, decos, solids, landmarks;
 
@@ -35,7 +38,9 @@ const dirName4 = (a, b) => DIRS4[(Math.round(Math.atan2(b.y - a.y, b.x - a.x) / 
 // Rumbo en grados como en una brújula: 0° norte, 90° este, 180° sur, 270° oeste
 const bearingOfAngle = ang => Math.round(((ang * 180 / Math.PI + 90) % 360 + 360) % 360) % 360;
 const bearing = (a, b) => bearingOfAngle(Math.atan2(b.y - a.y, b.x - a.x));
-const conArt =(prep, l) => (prep + ' ' + l.art + ' ' + l.name).replace('de el ', 'del ').replace('a el ', 'al ');
+const angDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+const stepsFromCamp = () => Math.round(dist(player, CAMP) / STEP); // pasos en línea recta desde la fogata
+const conArt = (prep, l) => (prep + ' ' + l.art + ' ' + l.name).replace('de el ', 'del ').replace('a el ', 'al ');
 
 function free(x, y, r, list, pad) {
   for (const o of list) if (Math.hypot(o.x - x, o.y - y) < o.r + r + pad) return false;
@@ -91,6 +96,8 @@ function genWorld(seed) {
       if (d < bd) { bd = d; best = l; }
     }
     f.lm = best; // la pista se arma según la categoría (ver flagHint)
+    f.route = { deg: bearing(CAMP, f), steps: Math.round(dist(CAMP, f) / STEP) }; // ruta de Rover desde la fogata
+    f.mark = null; f.result = null;
   }
 
   // Tiendas del campamento
@@ -190,8 +197,8 @@ const CATEGORIES = [
     desc: ['La aventura como es.', 'Pistas con noreste,', 'sureste, noroeste...'] },
   { name: 'Caminante', color: '#3b7bd9', diff: 'Difícil', energy: 1.25, fire: 1.25, rain: 0.8, food: 0, hint: 'grados',
     desc: ['Te cansas más rápido y', 'llueve más seguido.', 'Pistas en grados.'] },
-  { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire: 1.5, rain: 0.6, food: 0, hint: '',
-    desc: ['Todo se gasta rápido,', 'llueve mucho y no hay', 'pistas. ¡Suerte!'] },
+  { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire: 1.5, rain: 0.6, food: 0, hint: 'ruta',
+    desc: ['Banderas invisibles.', 'Sigue rumbo y pasos y', 'anótalo en la libreta.', '¡Suerte!'] },
 ];
 let cat = CATEGORIES[1]; // se cambia a la guardada cuando se cargan los ajustes
 
@@ -211,9 +218,10 @@ function startGame() {
   cat = CATEGORIES[settings.cat] || CATEGORIES[1];
   energy = 100; wood = 0; food = cat.food;
   rain = false; rainTimer = 0; nextRain = (70 + Math.random() * 60) * cat.rain;
-  toasts = []; playTime = 0; drops = []; mapOpen = false;
+  toasts = []; playTime = 0; drops = []; mapOpen = false; book = false; reveal = null;
   state = 'play';
-  toast('Encuentra las 5 banderas con la brújula. ¡No dejes que se apague la fogata!', 6);
+  if (cat.hint === 'ruta') toast(`Sigue el rumbo y los pasos desde la fogata. Marca con ${bindKey('marcar')} donde creas que está cada bandera.`, 7);
+  else toast('Encuentra las 5 banderas con la brújula. ¡No dejes que se apague la fogata!', 6);
 }
 
 function toast(text, t = 3) { toasts.push({ text, t }); if (toasts.length > 3) toasts.shift(); }
@@ -229,20 +237,26 @@ function darkness() {
 const isNight = () => darkness() > 0.5;
 
 function target() {
+  if (cat.hint === 'ruta') {
+    const r = flags.find(f => !f.done && !f.mark);
+    if (r) return { x: r.x, y: r.y, name: 'Bandera ' + r.n, hint: flagHint(r) };
+    if (flags.some(f => !f.done)) return { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: 'Ahí se revisa tu libreta' };
+  }
   const f = flags.find(f => !f.done);
-  return f ? { x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: flagHint(f) } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
+  return f ?{ x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: flagHint(f) } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
 }
 function flagHint(f) {
   const l = f.lm;
   if (!l || !cat.hint) return '';
   if (cat.hint === '4') return 'al ' + dirName4(l, f) + ' ' + conArt('de', l);
   if (cat.hint === '8') return 'al ' + dirName(l, f) + ' ' + conArt('de', l);
+  if (cat.hint === 'ruta') return `${f.route.deg}° y ${f.route.steps} pasos desde la fogata`;
   return 'a ' + bearing(l, f) + '° ' + conArt('de', l);
 }
 
 // ---------- Ajustes (se guardan en este navegador) ----------
-const DEFAULT_BINDS = { adelante: 'w', atras: 's', izquierda: 'a', derecha: 'd', arriba: 'arrowup', abajo: 'arrowdown', correr: 'shift', usar: 'e', comer: 'f', mapa: 'm' };
-const BIND_NAMES = { adelante: 'Caminar adelante', atras: 'Caminar atrás', izquierda: 'Girar a la izquierda', derecha: 'Girar a la derecha', arriba: 'Mirar arriba', abajo: 'Mirar abajo', correr: 'Correr', usar: 'Usar / recoger', comer: 'Comer', mapa: 'Mapa' };
+const DEFAULT_BINDS = { adelante: 'w', atras: 's', izquierda: 'a', derecha: 'd', arriba: 'arrowup', abajo: 'arrowdown', correr: 'shift', usar: 'e', comer: 'f', mapa: 'm', marcar: 'q', libreta: 'l' };
+const BIND_NAMES = { adelante: 'Caminar adelante', atras: 'Caminar atrás', izquierda: 'Girar a la izquierda', derecha: 'Girar a la derecha', arriba: 'Mirar arriba', abajo: 'Mirar abajo', correr: 'Correr', usar: 'Usar / recoger', comer: 'Comer', mapa: 'Mapa', marcar: 'Marcar (Rover)', libreta: 'Libreta (Rover)' };
 let settings = { sens: 5, giro: 5, invert: false, cat: 1, binds: { ...DEFAULT_BINDS } };
 try {
   const s = JSON.parse(localStorage.getItem('scout_ajustes'));
@@ -269,7 +283,7 @@ function openMenu() {
   if (mouseLocked()) document.exitPointerLock();
 }
 function closeMenu() { state = 'play'; waitingBind = null; confirmExit = false; }
-function exitToTitle() { state = 'title'; confirmExit = false; player = null; mapOpen = false; }
+function exitToTitle() { state = 'title'; confirmExit = false; player = null; mapOpen = false; book = false; reveal = null; }
 function lockMouse() {
   if (!cv.requestPointerLock || mouseLocked()) return;
   const p = cv.requestPointerLock();
@@ -295,7 +309,7 @@ addEventListener('keydown', e => {
   }
   if (k === 'escape' && (state === 'win' || state === 'lose')) { state = 'title'; return; }
   if (k === 'escape') {
-    if (state === 'play') { if (mapOpen) mapOpen = false; else openMenu(); }
+    if (state === 'play') { if (mapOpen) mapOpen = false; else if (book) { if (!reveal) book = false; } else openMenu(); }
     else if (state === 'menu' && confirmExit) confirmExit = false;
     else if (state === 'menu' && performance.now() - menuOpenedAt > 300) closeMenu();
     return;
@@ -303,7 +317,15 @@ addEventListener('keydown', e => {
   if (state === 'play') {
     if (k === settings.binds.usar) interact();
     if (k === settings.binds.comer) eat();
-    if (k === settings.binds.mapa) mapOpen = !mapOpen;
+    if (k === settings.binds.mapa && !book) mapOpen = !mapOpen;
+    if (cat.hint === 'ruta') {
+      if (k === settings.binds.libreta && !reveal) { book = !book; mapOpen = false; }
+      if (k === settings.binds.marcar && !book) markFlag();
+      if (k === 'backspace' && book && !reveal) { // borrar la última marca
+        const m = flags.filter(f => !f.done && f.mark).pop();
+        if (m) { m.mark = null; toast('Borraste la marca de la Bandera ' + m.n + '.'); }
+      }
+    }
   }
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -331,13 +353,14 @@ cv.addEventListener('mousedown', e => {
   }
   if (state !== 'play') return;
   if (mapOpen) { mapOpen = false; return; }
+  if (book) { if (!reveal) book = false; return; }
   const { x, y } = miniRect();
   if (e.clientX >= x && e.clientX <= x + MAP && e.clientY >= y && e.clientY <= y + MAP) { mapOpen = true; return; }
   lockMouse();
 });
 addEventListener('mousemove', e => {
   if (dragSlider && state === 'menu') dragSlider.fn(e.clientX);
-  if (mouseLocked() && state === 'play' && !mapOpen) {
+  if (mouseLocked() && state === 'play' && !mapOpen && !book) {
     const k = settings.sens * 0.0006;
     player.ang += e.movementX * k;
     player.pitch = clamp(player.pitch - e.movementY * k * (settings.invert ? -1 : 1), -0.5, 0.5);
@@ -373,6 +396,65 @@ function interact() {
   }
 }
 
+// ---------- Libreta (Rover) ----------
+// Marcas donde crees que está la bandera; al volver al campamento se revisan en orden del 1 al 5.
+let book = false, reveal = null;
+function markFlag() {
+  if (dist(player, CAMP) < CAMP_ZONE) { toast('Sal del campamento para marcar.'); return; }
+  const f = flags.find(f => !f.done && !f.mark);
+  if (!f) { toast('Ya marcaste todas. Vuelve al campamento a revisar tu libreta.'); return; }
+  f.mark = { deg: bearing(CAMP, player), steps: stepsFromCamp() };
+  toast(`📒 Bandera ${f.n} anotada: ${f.mark.deg}°, ${f.mark.steps} pasos`, 4);
+  if (!flags.some(g => !g.done && !g.mark)) toast('¡Libreta completa! Regresa al campamento.', 4);
+}
+function updateReveal(dt) {
+  reveal.t += dt;
+  if (reveal.i < NUM_FLAGS) {
+    if (reveal.t < 0.9) return;
+    reveal.t = 0;
+    const f = flags[reveal.i++];
+    if (f.done) return;
+    const ok = Math.abs(f.mark.steps - f.route.steps) <= TOL_STEPS && angDiff(f.mark.deg, f.route.deg) <= TOL_DEG;
+    if (ok) { f.done = true; f.result = 'ok'; } else { f.result = 'mal'; f.mark = null; }
+  } else if (reveal.t > 1.6) {
+    reveal = null;
+    if (flags.every(f => f.done)) { book = false; state = 'win'; }
+    else toast('Las que salieron mal se borraron: búscalas otra vez.', 5);
+  }
+}
+
+function drawBook() {
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
+  const w = Math.min(560, W - 40), h = 400, x0 = (W - w) / 2, y0 = (H - h) / 2;
+  ctx.fillStyle = '#f4ecd2'; roundRect(x0, y0, w, h, 12); ctx.fill();
+  ctx.strokeStyle = '#8e7a4a'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.strokeStyle = 'rgba(80,120,180,0.25)'; ctx.lineWidth = 1; // renglones
+  for (let y = y0 + 90; y < y0 + h - 50; y += 28) { ctx.beginPath(); ctx.moveTo(x0 + 20, y); ctx.lineTo(x0 + w - 20, y); ctx.stroke(); }
+  ctx.textAlign = 'center'; ctx.fillStyle = '#3a2a14'; ctx.font = 'bold 24px sans-serif';
+  ctx.fillText('📒 Libreta de campo', W / 2, y0 + 42);
+  ctx.font = '13px sans-serif'; ctx.fillStyle = '#6b5a3a';
+  ctx.fillText(`Se vale fallar hasta ${TOL_STEPS} pasos y ${TOL_DEG}°`, W / 2, y0 + 66);
+  flags.forEach((f, i) => {
+    const y = y0 + 110 + i * 52;
+    const checking = reveal && reveal.i === i + 1 && reveal.t < 0.9 || reveal && reveal.i <= i;
+    ctx.textAlign = 'left'; ctx.fillStyle = '#3a2a14'; ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(`Bandera ${f.n}`, x0 + 24, y);
+    ctx.font = '14px sans-serif'; ctx.fillStyle = '#6b5a3a';
+    ctx.fillText(`Pista: ${f.route.deg}° y ${f.route.steps} pasos`, x0 + 24, y + 20);
+    ctx.textAlign = 'right'; ctx.font = 'bold 15px sans-serif';
+    let txt, col;
+    if (f.done) { txt = '✓ ¡Encontrada!'; col = '#2e8b3a'; }
+    else if (reveal && reveal.i <= i && f.mark) { txt = `${f.mark.deg}°, ${f.mark.steps} pasos  …`; col = '#3a2a14'; }
+    else if (f.mark) { txt = `Tu marca: ${f.mark.deg}°, ${f.mark.steps} pasos`; col = '#2a4a8a'; }
+    else if (f.result === 'mal') { txt = '✗ Mal, búscala otra vez'; col = '#c0392b'; }
+    else { txt = '— sin marcar —'; col = '#9a8a6a'; }
+    if (checking && f.mark && !f.done) col = '#b07a10';
+    ctx.fillStyle = col; ctx.fillText(txt, x0 + w - 24, y + 10);
+  });
+  ctx.textAlign = 'center'; ctx.font = '13px sans-serif'; ctx.fillStyle = '#6b5a3a';
+  ctx.fillText(reveal ? 'Revisando...' : `${bindKey('libreta')} o clic: cerrar · Borrar: quitar la última marca`, W / 2, y0 + h - 18);
+}
+
 function eat() {
   if (food <= 0) { toast('No tienes comida. Busca arbustos con bayas.'); return; }
   if (energy >= 99) { toast('No tienes hambre.'); return; }
@@ -384,7 +466,8 @@ function eat() {
 function update(dt) {
   for (const t of toasts) t.t -= dt;
   toasts = toasts.filter(t => t.t > 0);
-  if (state !== 'play' || mapOpen) return;
+  if (state === 'play' && reveal) { updateReveal(dt); return; }
+  if (state !== 'play' || mapOpen || book) return;
   playTime += dt;
 
   // Tiempo y días
@@ -443,7 +526,11 @@ function update(dt) {
   for (const b of bushes) if (b.berries < 3 && (b.regrow += dt) > 45) { b.berries++; b.regrow = 0; }
 
   // Banderas
-  for (const f of flags) {
+  if (cat.hint === 'ruta') { // Rover: al volver al campamento con la libreta llena, se revisa
+    if (flags.some(f => !f.done) && flags.every(f => f.done || f.mark) && dist(player, CAMP) < CAMP_ZONE) {
+      book = true; mapOpen = false; reveal = { t: 0, i: 0 };
+    }
+  } else for (const f of flags) {
     if (!f.done && dist(player, f) < 55) {
       f.done = true;
       const left = flags.filter(f => !f.done).length;
@@ -693,7 +780,7 @@ function drawWorld() {
   for (const k of rocks) add(k, SPR.rock[k.seed < 0.5 ? 0 : 1], k.r * 2.6, k.r * 1.7);
   for (const b of bushes) add(b, SPR.bush[b.berries], 62, 44);
   for (const t of tents) add(t, SPR.tent[tents.indexOf(t)], 96, 66);
-  for (const f of flags) add(f, SPR.flag[f.done ? 1 : 0][f.n - 1], 46, 120);
+  for (const f of flags) if (f.done || cat.hint !== 'ruta') add(f, SPR.flag[f.done ? 1 : 0][f.n - 1], 46, 120); // en Rover son invisibles hasta revelarlas
   for (const s of sticks) add(s, SPR.stick, 30, 9);
   for (const d of decos) {
     const dd = Math.abs(d.x - player.x) + Math.abs(d.y - player.y);
@@ -814,7 +901,8 @@ function drawHUD() {
     ctx.fillStyle = '#fff'; ctx.fillText(text, x + w / 2, y);
   };
   let py = cy + R + 29;
-  if (cat.hint === 'grados' || !cat.hint) { pill('Rumbo: ' + bearingOfAngle(player.ang) + '°', py); py += 28; } // categorías que usan grados
+  if (cat.hint === 'grados' || cat.hint === 'ruta') { pill('Rumbo: ' + bearingOfAngle(player.ang) + '°', py); py += 28; } // categorías que usan grados
+  if (cat.hint === 'ruta') { pill('Pasos desde la fogata: ' + stepsFromCamp(), py); py += 28; }
   pill('Ve a: ' + tg.name, py); py += 28;
   if (tg.hint) { pill(tg.hint, py); py += 28; }
   ctx.fillStyle = '#fff';
@@ -839,8 +927,8 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   });
   ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'left';
-  ctx.fillText(`${bindKey('adelante')}/${bindKey('atras')}: caminar · ${bindKey('izquierda')}/${bindKey('derecha')}: girar · mouse: mirar · ${bindKey('usar')}: usar · ${bindKey('comer')}: comer · ${bindKey('mapa')}: mapa · Esc: menú`, 14, H - 12);
-  if (!mouseLocked() && !mapOpen && state === 'play') {
+  ctx.fillText(`${bindKey('adelante')}/${bindKey('atras')}: caminar · ${bindKey('izquierda')}/${bindKey('derecha')}: girar · mouse: mirar · ${bindKey('usar')}: usar · ${bindKey('comer')}: comer · ${bindKey('mapa')}: mapa${cat.hint === 'ruta' ? ` · ${bindKey('marcar')}: marcar · ${bindKey('libreta')}: libreta` : ''} · Esc: menú`, 14, H - 12);
+  if (!mouseLocked() && !mapOpen && !book && state === 'play') {
     ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillText('Haz clic para mirar con el mouse', W / 2, 30);
   }
@@ -1008,13 +1096,13 @@ function drawMenu() {
   ctx.font = '13px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'right';
   ctx.fillText('Haz clic en una tecla y luego pulsa la nueva', 300, -10);
   Object.keys(DEFAULT_BINDS).forEach((a, i) => {
-    const col = i < 5 ? -300 : 10, y = 8 + (i % 5) * 38;
+    const col = i < 6 ? -300 : 10, y = 8 + (i % 6) * 34;
     ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(BIND_NAMES[a], col, y + 20);
     const waiting = waitingBind === a;
     button(col + 180, y, 100, 30, waiting ? '...' : bindKey(a), () => { waitingBind = a; }, waiting);
   });
-  button(-120, 205, 240, 36, 'Restablecer controles', () => { settings.binds = { ...DEFAULT_BINDS }; saveSettings(); });
+  button(-120, 222, 240, 36, 'Restablecer controles', () => { settings.binds = { ...DEFAULT_BINDS }; saveSettings(); });
 
   ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(waitingBind ? 'Pulsa la tecla nueva (Esc para cancelar)' : 'Esc: volver al juego', 0, 280);
@@ -1046,6 +1134,7 @@ function draw() {
   drawWorld();
   drawHUD();
   if (mapOpen && state === 'play') drawBigMap();
+  if (book && state === 'play') drawBook();
   const mins = Math.floor(playTime / 60), secs = Math.floor(playTime % 60);
   if (state === 'menu') drawMenu();
   if (state === 'win') screen('¡Insignia de Explorador!', [`Encontraste las ${NUM_FLAGS} banderas y volviste al campamento.`, `${cat.name} (${cat.diff}) · Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', 'ENTER: jugar otra vez · Esc: elegir otra categoría']);
