@@ -374,7 +374,7 @@ cv.addEventListener('mousedown', e => {
 
 // ---------- Controles táctiles (celular) ----------
 // Mitad izquierda: palanca para caminar y girar. Resto: arrastrar para mirar. Botones a la derecha.
-let isTouch = matchMedia('(pointer: coarse)').matches; // también se activa al primer toque
+let isTouch = matchMedia('(pointer: coarse)').matches || matchMedia('(hover: none)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent); // también se activa al primer toque
 const touch = { stick: null, look: null, run: false, fwd: 0, turn: 0, flash: null };
 const STICK_R = 60;
 function touchButtons() {
