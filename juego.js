@@ -30,7 +30,12 @@ let rnd, trees, rocks, bushes, sticks, lakes, flags, tents, decos, solids, landm
 // Dirección de b vista desde a (el norte es arriba)
 const DIRS = ['este', 'sureste', 'sur', 'suroeste', 'oeste', 'noroeste', 'norte', 'noreste'];
 const dirName = (a, b) => DIRS[(Math.round(Math.atan2(b.y - a.y, b.x - a.x) / (Math.PI / 4)) + 8) % 8];
-const conArt = (prep, l) => (prep + ' ' + l.art + ' ' + l.name).replace('de el ', 'del ').replace('a el ', 'al ');
+const DIRS4 = ['este', 'sur', 'oeste', 'norte'];
+const dirName4 = (a, b) => DIRS4[(Math.round(Math.atan2(b.y - a.y, b.x - a.x) / (Math.PI / 2)) + 4) % 4];
+// Rumbo en grados como en una brújula: 0° norte, 90° este, 180° sur, 270° oeste
+const bearingOfAngle = ang => Math.round(((ang * 180 / Math.PI + 90) % 360 + 360) % 360) % 360;
+const bearing = (a, b) => bearingOfAngle(Math.atan2(b.y - a.y, b.x - a.x));
+const conArt =(prep, l) => (prep + ' ' + l.art + ' ' + l.name).replace('de el ', 'del ').replace('a el ', 'al ');
 
 function free(x, y, r, list, pad) {
   for (const o of list) if (Math.hypot(o.x - x, o.y - y) < o.r + r + pad) return false;
@@ -85,10 +90,7 @@ function genWorld(seed) {
       const d = Math.hypot(f.x - l.x, f.y - l.y) - l.r;
       if (d < bd) { bd = d; best = l; }
     }
-    if (!best) f.hint = '';
-    else if (bd < 0) f.hint = conArt('en', best); // dentro del pinar
-    else if (bd < 160) f.hint = conArt('junto a', best);
-    else f.hint = 'al ' + dirName(best, f) + ' ' + conArt('de', best);
+    f.lm = best; // la pista se arma según la categoría (ver flagHint)
   }
 
   // Tiendas del campamento
@@ -181,13 +183,14 @@ function placeStick() {
 // ---------- Categorías scout = dificultades (el color del uniforme es solo de adorno) ----------
 // energy/fire: qué tan rápido se gastan; rain: cada cuánto llueve (más bajo = más seguido)
 const CATEGORIES = [
-  { name: 'Lobezno/a', color: '#e8c23a', diff: 'Fácil', energy: 0.7, fire: 0.7, rain: 1.4, food: 4, hint: true,
-    desc: ['Te cansas más lento y la', 'fogata dura más. Empiezas', 'con bayas.'] },
-  { name: 'Tropero/a', color: '#3fae4a', diff: 'Normal', energy: 1, fire: 1, rain: 1, food: 2, hint: true,
-    desc: ['La aventura como es.', 'La brújula te da pistas.'] },
-  { name: 'Caminante', color: '#3b7bd9', diff: 'Difícil', energy: 1.25, fire: 1.25, rain: 0.8, food: 0, hint: false,
-    desc: ['Te cansas más rápido y', 'llueve más seguido.', 'La brújula no da pistas.'] },
-  { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire: 1.5, rain: 0.6, food: 0, hint: false,
+// hint: cómo son las pistas de las banderas ('4' = N/S/E/O, '8' = con diagonales, 'grados' = rumbo en grados)
+  { name: 'Lobezno/a', color: '#e8c23a', diff: 'Fácil', energy: 0.7, fire: 0.7, rain: 1.4, food: 4, hint: '4',
+    desc: ['Te cansas más lento y la', 'fogata dura más. Pistas:', 'norte, sur, este u oeste.'] },
+  { name: 'Tropero/a', color: '#3fae4a', diff: 'Normal', energy: 1, fire: 1, rain: 1, food: 2, hint: '8',
+    desc: ['La aventura como es.', 'Pistas con noreste,', 'sureste, noroeste...'] },
+  { name: 'Caminante', color: '#3b7bd9', diff: 'Difícil', energy: 1.25, fire: 1.25, rain: 0.8, food: 0, hint: 'grados',
+    desc: ['Te cansas más rápido y', 'llueve más seguido.', 'Pistas en grados.'] },
+  { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire: 1.5, rain: 0.6, food: 0, hint: '',
     desc: ['Todo se gasta rápido,', 'llueve mucho y no hay', 'pistas. ¡Suerte!'] },
 ];
 let cat = CATEGORIES[1]; // se cambia a la guardada cuando se cargan los ajustes
@@ -227,7 +230,14 @@ const isNight = () => darkness() > 0.5;
 
 function target() {
   const f = flags.find(f => !f.done);
-  return f ? { x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: cat.hint ? f.hint : '' } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
+  return f ? { x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: flagHint(f) } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
+}
+function flagHint(f) {
+  const l = f.lm;
+  if (!l || !cat.hint) return '';
+  if (cat.hint === '4') return 'al ' + dirName4(l, f) + ' ' + conArt('de', l);
+  if (cat.hint === '8') return 'al ' + dirName(l, f) + ' ' + conArt('de', l);
+  return 'a ' + bearing(l, f) + '° ' + conArt('de', l);
 }
 
 // ---------- Ajustes (se guardan en este navegador) ----------
@@ -803,10 +813,12 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(x, y - 17, w, 24, 8); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText(text, x + w / 2, y);
   };
-  pill('Ve a: ' + tg.name, cy + R + 29);
-  if (tg.hint) pill(tg.hint, cy + R + 57);
+  let py = cy + R + 29;
+  if (cat.hint === 'grados' || !cat.hint) { pill('Rumbo: ' + bearingOfAngle(player.ang) + '°', py); py += 28; } // categorías que usan grados
+  pill('Ve a: ' + tg.name, py); py += 28;
+  if (tg.hint) { pill(tg.hint, py); py += 28; }
   ctx.fillStyle = '#fff';
-  ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, cy + R + (tg.hint ? 84 : 56));
+  ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, py - 1);
 
   // Aviso de interacción
   const n = nearInteract();
