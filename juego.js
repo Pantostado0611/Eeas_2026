@@ -198,7 +198,7 @@ const CATEGORIES = [
   { name: 'Caminante', color: '#3b7bd9', diff: 'Difícil', energy: 1.25, fire: 1.25, rain: 0.8, food: 0, hint: 'grados',
     desc: ['Te cansas más rápido y', 'llueve más seguido.', 'Pistas en grados.'] },
   { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire: 1.5, rain: 0.6, food: 0, hint: 'ruta',
-    desc: ['Banderas invisibles.', 'Sigue rumbo y pasos y', 'anótalo en la libreta.', '¡Suerte!'] },
+    desc: ['Bases invisibles: gana', 'la pista con un reto,', 'sigue rumbo y pasos y', 'anótalo en la libreta.'] },
 ];
 let cat = CATEGORIES[1]; // se cambia a la guardada cuando se cargan los ajustes
 
@@ -218,10 +218,10 @@ function startGame() {
   cat = CATEGORIES[settings.cat] || CATEGORIES[1];
   energy = 100; wood = 0; food = cat.food;
   rain = false; rainTimer = 0; nextRain = (70 + Math.random() * 60) * cat.rain;
-  toasts = []; playTime = 0; drops = []; mapOpen = false; book = false; reveal = null;
+  toasts = []; playTime = 0; drops = []; mapOpen = false; book = false; reveal = null; closeReto();
   state = 'play';
-  if (cat.hint === 'ruta') toast(`Sigue el rumbo y los pasos desde la fogata. Marca con ${keyHint('marcar')} donde creas que está cada bandera.`, 7);
-  else toast('Encuentra las 5 banderas con la brújula. ¡No dejes que se apague la fogata!', 6);
+  if (cat.hint === 'ruta') toast(`Resuelve el reto [${keyHint('reto')}] para saber dónde está cada base. Luego marca con [${keyHint('marcar')}].`, 7);
+  else toast('Llega a las 5 bases y resuelve su reto. ¡No dejes que se apague la fogata!', 6);
 }
 
 function toast(text, t = 3) { toasts.push({ text, t }); if (toasts.length > 3) toasts.shift(); }
@@ -239,11 +239,11 @@ const isNight = () => darkness() > 0.5;
 function target() {
   if (cat.hint === 'ruta') {
     const r = flags.find(f => !f.done && !f.mark);
-    if (r) return { x: r.x, y: r.y, name: 'Bandera ' + r.n, hint: flagHint(r) };
+    if (r) return { x: r.x, y: r.y, name: 'Base ' + r.n, hint: r.unlocked ? flagHint(r) : `Resuelve el reto [${keyHint('reto')}] para la pista` };
     if (flags.some(f => !f.done)) return { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: 'Ahí se revisa tu libreta' };
   }
   const f = flags.find(f => !f.done);
-  return f ?{ x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: flagHint(f) } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
+  return f ?{ x: f.x, y: f.y, name: 'Base ' + f.n, hint: flagHint(f) } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
 }
 function flagHint(f) {
   const l = f.lm;
@@ -255,8 +255,8 @@ function flagHint(f) {
 }
 
 // ---------- Ajustes (se guardan en este navegador) ----------
-const DEFAULT_BINDS = { adelante: 'w', atras: 's', izquierda: 'a', derecha: 'd', arriba: 'arrowup', abajo: 'arrowdown', correr: 'shift', usar: 'e', comer: 'f', mapa: 'm', marcar: 'q', libreta: 'l' };
-const BIND_NAMES = { adelante: 'Caminar adelante', atras: 'Caminar atrás', izquierda: 'Girar a la izquierda', derecha: 'Girar a la derecha', arriba: 'Mirar arriba', abajo: 'Mirar abajo', correr: 'Correr', usar: 'Usar / recoger', comer: 'Comer', mapa: 'Mapa', marcar: 'Marcar (Rover)', libreta: 'Libreta (Rover)' };
+const DEFAULT_BINDS = { adelante: 'w', atras: 's', izquierda: 'a', derecha: 'd', arriba: 'arrowup', abajo: 'arrowdown', correr: 'shift', usar: 'e', comer: 'f', mapa: 'm', marcar: 'q', libreta: 'l', reto: 'r' };
+const BIND_NAMES = { adelante: 'Caminar adelante', atras: 'Caminar atrás', izquierda: 'Girar a la izquierda', derecha: 'Girar a la derecha', arriba: 'Mirar arriba', abajo: 'Mirar abajo', correr: 'Correr', usar: 'Usar / recoger', comer: 'Comer', mapa: 'Mapa', marcar: 'Marcar (Rover)', libreta: 'Libreta (Rover)', reto: 'Reto (Rover)' };
 let settings = { sens: 5, giro: 5, invert: false, cat: 1, binds: { ...DEFAULT_BINDS } };
 try {
   const s = JSON.parse(localStorage.getItem('scout_ajustes'));
@@ -267,7 +267,7 @@ function saveSettings() { try { localStorage.setItem('scout_ajustes', JSON.strin
 const keyName = k => ({ ' ': 'Espacio', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→', shift: 'Shift', control: 'Ctrl', alt: 'Alt', tab: 'Tab', enter: 'Enter', backspace: 'Borrar' }[k] || k.toUpperCase());
 const bindKey = a => keyName(settings.binds[a]);
 // En celular se nombra el botón en vez de la tecla
-const keyHint = a => isTouch ? ({ usar: 'Usar', comer: 'Comer', marcar: 'Marcar', libreta: 'Libreta', mapa: 'Mapa' }[a] || bindKey(a)) : bindKey(a);
+const keyHint = a => isTouch ? ({ usar: 'Usar', comer: 'Comer', marcar: 'Marcar', libreta: 'Libreta', mapa: 'Mapa', reto: 'Reto' }[a] || bindKey(a)) : bindKey(a);
 function rebind(action, k) {
   const other = Object.keys(settings.binds).find(a => a !== action && settings.binds[a] === k);
   if (other) settings.binds[other] = settings.binds[action]; // si la tecla ya se usaba, se intercambian
@@ -285,7 +285,7 @@ function openMenu() {
   if (mouseLocked()) document.exitPointerLock();
 }
 function closeMenu() { state = 'play'; waitingBind = null; confirmExit = false; }
-function exitToTitle() { state = 'title'; confirmExit = false; player = null; mapOpen = false; book = false; reveal = null; }
+function exitToTitle() { state = 'title'; confirmExit = false; player = null; mapOpen = false; book = false; reveal = null; closeReto(); }
 function lockMouse() {
   if (!cv.requestPointerLock || mouseLocked()) return;
   const p = cv.requestPointerLock();
@@ -294,6 +294,12 @@ function lockMouse() {
 
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
+  if (reto && state === 'play') { // con un reto abierto las teclas son para el reto (y para escribir)
+    if (k === 'escape') { e.preventDefault(); closeReto(); }
+    else if (k === 'enter' && !retoChoice()) { e.preventDefault(); answerReto(retoInput.value); }
+    else if (retoChoice() && k >= '1' && k <= '4' && !e.repeat) answerReto(reto.c.options[+k - 1]);
+    return;
+  }
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'tab'].includes(k)) e.preventDefault();
   if (waitingBind) { // en el menú, esperando la tecla nueva para un control
     e.preventDefault();
@@ -317,7 +323,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (state === 'play') {
-    for (const a of ['usar', 'comer', 'mapa', 'libreta', 'marcar']) if (k === settings.binds[a]) doAction(a);
+    for (const a of ['usar', 'comer', 'mapa', 'libreta', 'marcar', 'reto']) if (k === settings.binds[a]) doAction(a);
     if (k === 'backspace' && book && !reveal) eraseLastMark();
   }
 });
@@ -330,11 +336,17 @@ function doAction(a) {
   if (cat.hint === 'ruta') {
     if (a === 'libreta' && !reveal) { book = !book; mapOpen = false; }
     if (a === 'marcar' && !book) markFlag();
+    if (a === 'reto' && !book) {
+      const r = flags.find(f => !f.done && !f.mark);
+      if (!r) toast('Ya tienes todas las pistas. Vuelve al campamento.');
+      else if (r.unlocked) toast(`Ya tienes la pista de la Base ${r.n}: ${flagHint(r)}`, 4);
+      else openReto(r);
+    }
   }
 }
 function eraseLastMark() {
   const m = flags.filter(f => !f.done && f.mark).pop();
-  if (m) { m.mark = null; toast('Borraste la marca de la Bandera ' + m.n + '.'); }
+  if (m) { m.mark = null; toast('Borraste la marca de la Base ' + m.n + '.'); }
 }
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
@@ -357,6 +369,7 @@ function tapAt(cx, cy) {
   }
   if (state === 'win' || state === 'lose') { if (isTouch) state = 'title'; return true; }
   if (state !== 'play') return true;
+  if (reto) { for (const h of reto.hits || []) if (inside(h)) { h.fn(); break; } return true; }
   if (mapOpen) { mapOpen = false; return true; }
   if (book) {
     if (reveal) return true;
@@ -383,7 +396,9 @@ function touchButtons() {
   add('usar', 'Usar', W - 70, H - 72, 38);
   add('correr', 'Correr', W - 70, H - 158, 30);
   add('comer', 'Comer', W - 158, H - 50, 30);
-  if (cat.hint === 'ruta') { add('marcar', 'Marcar', W - 152, H - 130, 30); add('libreta', 'Libreta', H > W ? W - 70 : W - 240, H > W ? H - 240 : H - 50, 30); }
+  if (cat.hint === 'ruta') {
+    const r = flags.find(f => !f.done && !f.mark), locked = r && !r.unlocked; // sin pista: el botón es "Reto"
+    add(locked ? 'reto' : 'marcar', locked ? 'Reto' : 'Marcar', W - 152, H - 130, 30); add('libreta', 'Libreta', H > W ? W - 70 : W - 240, H > W ? H - 240 : H - 50, 30); }
   if (H > W) { add('mapa', 'Mapa', W - 120, 206, 24); add('menu', 'Menú', W - 54, 206, 24); } // vertical: debajo de la brújula
   else { add('mapa', 'Mapa', W / 2 - 46, 30, 24); add('menu', 'Menú', W / 2 + 46, 30, 24); }
   return b;
@@ -417,7 +432,7 @@ cv.addEventListener('touchmove', e => {
     const x = t.clientX, y = t.clientY;
     if (dragSlider && state === 'menu') dragSlider.fn(x);
     if (touch.stick && touch.stick.id === t.identifier) { touch.stick.x = x; touch.stick.y = y; stickMove(touch.stick); }
-    if (touch.look && touch.look.id === t.identifier && state === 'play' && !mapOpen && !book) {
+    if (touch.look && touch.look.id === t.identifier && state === 'play' && !mapOpen && !book && !reto) {
       const k = settings.sens * 0.0012;
       player.ang += (x - touch.look.x) * k;
       player.pitch = clamp(player.pitch - (y - touch.look.y) * k * (settings.invert ? -1 : 1), -0.5, 0.5);
@@ -464,7 +479,7 @@ function drawTouchControls() {
 }
 addEventListener('mousemove', e => {
   if (dragSlider && state === 'menu') dragSlider.fn(e.clientX);
-  if (mouseLocked() && state === 'play' && !mapOpen && !book) {
+  if (mouseLocked() && state === 'play' && !mapOpen && !book && !reto) {
     const k = settings.sens * 0.0006;
     player.ang += e.movementX * k;
     player.pitch = clamp(player.pitch - e.movementY * k * (settings.invert ? -1 : 1), -0.5, 0.5);
@@ -472,7 +487,7 @@ addEventListener('mousemove', e => {
 });
 addEventListener('mouseup', () => { dragSlider = null; });
 // Esc suelta el mouse (lo hace el navegador): en ese momento se abre el menú
-document.addEventListener('pointerlockchange', () => { if (!mouseLocked() && state === 'play') openMenu(); });
+document.addEventListener('pointerlockchange', () => { if (!mouseLocked() && state === 'play' && !reto) openMenu(); });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') openMenu(); });
 
 function nearInteract() {
@@ -500,6 +515,176 @@ function interact() {
   }
 }
 
+// ---------- Miniretos de las bases (claves scout) ----------
+// Manada y Tropa eligen entre 4 opciones; Comunidad y Clan escriben la respuesta.
+// Si fallas, sale otro reto distinto: otra palabra, otra clave o al revés (cifrar en vez de descifrar).
+const RETO_WORDS = ['FOGATA', 'BRUJULA', 'TIENDA', 'MOCHILA', 'LINTERNA', 'BOSQUE', 'NUDO', 'PATRULLA', 'MAPA', 'LAGO',
+  'ARBOL', 'ESTRELLA', 'LUNA', 'AGUILA', 'LOBO', 'SCOUT', 'TROPA', 'MANADA', 'RUTA', 'HUELLA', 'CUERDA', 'NORTE',
+  'FUEGO', 'AVENTURA', 'CAMPAMENTO', 'SIEMPRE LISTOS', 'BUENA ACCION', 'RIO', 'SOL', 'CANTIMPLORA'];
+const MORSE = { A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.', H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--',
+  N: '-.', O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-', V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..' };
+const CENIT = { C: 'P', P: 'C', E: 'O', O: 'E', N: 'L', L: 'N', I: 'A', A: 'I', T: 'R', R: 'T' };
+const CLAVES = {
+  morse: { name: 'Morse', enc: w => w.split(' ').map(p => [...p].map(c => MORSE[c]).join(' ')).join(' / ') },
+  murcielago: { name: 'Murciélago', enc: w => [...w].map(c => 'MURCIELAGO'.includes(c) ? 'MURCIELAGO'.indexOf(c) : c).join('') },
+  cenit: { name: 'Cenit-Polar', enc: w => [...w].map(c => CENIT[c] || c).join('') },
+  numeros: { name: 'Números', enc: w => w.split(' ').map(p => [...p].map(c => c.charCodeAt(0) - 64).join('-')).join(' / ') },
+};
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const retoChoice = () => cat.hint === '4' || cat.hint === '8';
+const longOpts = c => retoChoice() && c.form === 'cif' && (c.key === 'morse' || c.key === 'numeros');
+
+let reto = null; // { f: base, c: reto actual, msg, hits }
+const retoInput = document.createElement('input');
+Object.assign(retoInput, { type: 'text', autocomplete: 'off', spellcheck: false });
+retoInput.setAttribute('autocapitalize', 'characters');
+retoInput.setAttribute('autocorrect', 'off');
+retoInput.style.cssText = 'position:fixed;display:none;box-sizing:border-box;border:2px solid #8e7a4a;border-radius:8px;padding:0 10px;background:#fffaf0;color:#2a2a2a;font-family:monospace;outline:none;';
+document.body.appendChild(retoInput);
+
+function newReto(f) {
+  f.used = f.used || [];
+  const last = f.used[f.used.length - 1];
+  let c;
+  for (let t = 0; t < 60; t++) {
+    c = { key: pick(Object.keys(CLAVES)), word: pick(RETO_WORDS), form: 'des' };
+    if (last) { // variar el reto anterior: otra palabra, otra clave, o al revés
+      const v = Math.floor(Math.random() * 3);
+      if (v === 0) { c.key = last.key; c.form = last.form; }
+      if (v === 1) { c.word = last.word; c.form = last.form; }
+      if (v === 2) { c.key = last.key; c.form = last.form === 'des' ? 'cif' : 'des'; }
+    }
+    if (longOpts(c) && c.word.length > 6 && t < 50) continue; // opciones en morse/números largas no caben en los botones
+    if (!f.used.some(u => u.key === c.key && u.word === c.word && u.form === c.form)) break;
+  }
+  f.used.push({ key: c.key, word: c.word, form: c.form });
+  const enc = CLAVES[c.key].enc;
+  c.shown = c.form === 'des' ? enc(c.word) : c.word;
+  c.answer = c.form === 'des' ? c.word : enc(c.word);
+  if (retoChoice()) {
+    const others = shuffle(RETO_WORDS.filter(w => w !== c.word && enc(w) !== enc(c.word) && (!longOpts(c) || w.length <= 6))).slice(0, 3);
+    c.options = shuffle([c.word, ...others].map(w => c.form === 'des' ? w : enc(w)));
+  }
+  return c;
+}
+function openReto(f) {
+  reto = { f, c: newReto(f), msg: null, hits: [] };
+  for (const k in keys) keys[k] = false;
+  touch.stick = touch.look = null; touch.fwd = touch.turn = 0;
+  if (mouseLocked()) document.exitPointerLock();
+  retoInput.value = '';
+  if (!retoChoice()) { retoInput.style.display = 'block'; setTimeout(() => retoInput.focus(), 0); }
+}
+function closeReto() {
+  if (reto) reto.f.wait = true;
+  reto = null;
+  retoInput.style.display = 'none'; retoInput.blur();
+}
+// Compara sin importar mayúsculas, acentos ni espacios de más
+function retoCorrect(c, ans) {
+  const n = s => String(s).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/…/g, '...').replace(/[—–_]/g, '-').trim();
+  const a = n(ans), b = n(c.answer);
+  if (c.form === 'cif' && c.key === 'morse') { const t = s => s.split(/[\s\/]+/).filter(Boolean).join(' '); return t(a) === t(b); }
+  if (c.form === 'cif' && c.key === 'numeros') { const t = s => s.split(/\D+/).filter(Boolean).join(' '); return t(a) === t(b); }
+  return a.replace(/\s+/g, '') === b.replace(/\s+/g, '');
+}
+function answerReto(ans) {
+  if (!reto || ans === undefined) return;
+  if (!String(ans).trim()) { reto.msg = 'Escribe tu respuesta primero.'; return; }
+  const f = reto.f;
+  if (retoCorrect(reto.c, ans)) {
+    closeReto(); f.wait = false;
+    if (cat.hint === 'ruta') { f.unlocked = true; toast(`🔓 Pista de la Base ${f.n}: ${flagHint(f)}`, 7); }
+    else {
+      f.done = true;
+      const left = flags.filter(g => !g.done).length;
+      toast(left ? `✅ ¡Base ${f.n} completada! Faltan ${left}.` : '✅ ¡Todas las bases! Regresa al campamento.', 4);
+    }
+  } else {
+    reto.c = newReto(f); retoInput.value = '';
+    reto.msg = '✗ No era. Prueba con este otro reto.';
+    if (!retoChoice()) retoInput.focus();
+  }
+}
+
+function wrapText(text, maxW) {
+  const words = text.split(' '), lines = [];
+  let line = '';
+  for (const w of words) {
+    const t = line ? line + ' ' + w : w;
+    if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function drawClaveTable(key, x, y, w) {
+  ctx.textAlign = 'center'; ctx.fillStyle = '#3a2a14';
+  if (key === 'morse') {
+    ctx.font = 'bold 14px monospace';
+    Object.entries(MORSE).forEach(([l, m], i) => ctx.fillText(`${l} ${m}`, x + (i % 7 + 0.5) * w / 7, y + 18 + Math.floor(i / 7) * 24));
+  } else if (key === 'murcielago') {
+    ctx.font = 'bold 20px monospace';
+    [...'MURCIELAGO'].forEach((l, i) => {
+      const cx = x + (i + 0.5) * w / 10;
+      ctx.fillStyle = '#3a2a14'; ctx.fillText(l, cx, y + 30);
+      ctx.fillStyle = '#c0392b'; ctx.fillText(i, cx, y + 62);
+    });
+    ctx.font = '12px sans-serif'; ctx.fillStyle = '#6b5a3a'; ctx.fillText('Las letras que no están en MURCIÉLAGO se quedan igual', x + w / 2, y + 92);
+  } else if (key === 'cenit') {
+    ctx.font = 'bold 20px monospace';
+    [...'CENIT'].forEach((l, i) => {
+      const cx = x + (i + 0.5) * w / 5;
+      ctx.fillStyle = '#3a2a14'; ctx.fillText(l, cx, y + 30);
+      ctx.fillStyle = '#8e7a4a'; ctx.fillText('↕', cx, y + 52);
+      ctx.fillStyle = '#c0392b'; ctx.fillText('POLAR'[i], cx, y + 74);
+    });
+    ctx.font = '12px sans-serif'; ctx.fillStyle = '#6b5a3a'; ctx.fillText('Se cambia una por la otra; las demás letras se quedan igual', x + w / 2, y + 98);
+  } else {
+    ctx.font = 'bold 14px monospace';
+    for (let i = 0; i < 26; i++) ctx.fillText(`${String.fromCharCode(65 + i)}=${i + 1}`, x + (i % 9 + 0.5) * w / 9, y + 20 + Math.floor(i / 9) * 26);
+  }
+}
+function drawReto() {
+  const VW = 640, VH = 470, s = Math.min(1.2, (W - 12) / VW, (H - 12) / VH);
+  const ox = (W - VW * s) / 2, oy = (H - VH * s) / 2;
+  const c = reto.c, K = CLAVES[c.key];
+  reto.hits = [];
+  const hit = (x, y, w, h, fn) => reto.hits.push({ x: ox + x * s, y: oy + y * s, w: w * s, h: h * s, fn });
+  const btn = (x, y, w, h, text, fn, color, font) => {
+    ctx.fillStyle = color; roundRect(x, y, w, h, 9); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = font || 'bold 16px sans-serif';
+    let f = 16; while (ctx.measureText(text).width > w - 16 && f > 9) { f--; ctx.font = font ? font.replace(/\d+px/, f + 'px') : `bold ${f}px sans-serif`; }
+    ctx.fillText(text, x + w / 2, y + h / 2 + 6);
+    hit(x, y, w, h, fn);
+  };
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.translate(ox, oy); ctx.scale(s, s);
+  ctx.fillStyle = '#f4ecd2'; roundRect(0, 0, VW, VH, 14); ctx.fill();
+  ctx.strokeStyle = '#8e7a4a'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.textAlign = 'center'; ctx.fillStyle = '#3a2a14'; ctx.font = 'bold 22px sans-serif';
+  ctx.fillText(`🏕 Base ${reto.f.n} · Clave ${K.name}`, VW / 2, 36);
+  ctx.font = '15px sans-serif'; ctx.fillStyle = '#6b5a3a';
+  ctx.fillText(c.form === 'des' ? 'Descifra este mensaje:' : `Escribe esta palabra en clave ${K.name}:`, VW / 2, 62);
+  ctx.font = 'bold 22px monospace'; ctx.fillStyle = '#2a4a8a';
+  wrapText(c.shown, VW - 60).slice(0, 2).forEach((l, i) => ctx.fillText(l, VW / 2, 96 + i * 28));
+  if (retoChoice()) {
+    c.options.forEach((o, i) => btn(30 + (i % 2) * 300, 150 + Math.floor(i / 2) * 48, 280, 40, (isTouch ? '' : `${i + 1}.  `) + o, () => answerReto(o), '#4a5f45', 'bold 16px monospace'));
+  } else {
+    ctx.fillStyle = '#fffaf0'; roundRect(30, 150, 430, 42, 8); ctx.fill();
+    btn(475, 150, 135, 42, 'Comprobar', () => answerReto(retoInput.value), '#4a5f45');
+    Object.assign(retoInput.style, { display: 'block', left: ox + 30 * s + 'px', top: oy + 150 * s + 'px', width: 430 * s + 'px', height: 42 * s + 'px', fontSize: Math.round(18 * s) + 'px' });
+    retoInput.placeholder = c.form === 'des' ? 'Escribe la palabra...' : c.key === 'morse' ? 'Usa . y - con espacios' : 'Escribe la clave...';
+  }
+  if (reto.msg) { ctx.textAlign = 'center'; ctx.font = 'bold 15px sans-serif'; ctx.fillStyle = '#c0392b'; ctx.fillText(reto.msg, VW / 2, 268); }
+  ctx.strokeStyle = 'rgba(142,122,74,0.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(30, 284); ctx.lineTo(VW - 30, 284); ctx.stroke();
+  ctx.textAlign = 'left'; ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#6b5a3a'; ctx.fillText('Tabla de la clave', 30, 302);
+  drawClaveTable(c.key, 30, 308, VW - 60);
+  btn(VW - 140, VH - 46, 110, 32, 'Salir', closeReto, '#c0392b');
+  if (!isTouch) { ctx.textAlign = 'left'; ctx.font = '13px sans-serif'; ctx.fillStyle = '#6b5a3a'; ctx.fillText(retoChoice() ? '1-4 o clic para elegir · Esc: salir' : 'Enter: comprobar · Esc: salir', 30, VH - 24); }
+  ctx.restore();
+}
+
 // ---------- Libreta (Rover) ----------
 // Marcas donde crees que está la bandera; al volver al campamento se revisan en orden del 1 al 5.
 let book = false, reveal = null, bookErase = null; // bookErase: botón táctil de borrar marca
@@ -507,8 +692,9 @@ function markFlag() {
   if (dist(player, CAMP) < CAMP_ZONE) { toast('Sal del campamento para marcar.'); return; }
   const f = flags.find(f => !f.done && !f.mark);
   if (!f) { toast('Ya marcaste todas. Vuelve al campamento a revisar tu libreta.'); return; }
+  if (!f.unlocked) { toast(`Primero resuelve el reto de la Base ${f.n} con [${keyHint('reto')}] para saber dónde está.`, 4); return; }
   f.mark = { deg: bearing(CAMP, player), steps: stepsFromCamp() };
-  toast(`📒 Bandera ${f.n} anotada: ${f.mark.deg}°, ${f.mark.steps} pasos`, 4);
+  toast(`📒 Base ${f.n} anotada: ${f.mark.deg}°, ${f.mark.steps} pasos`, 4);
   if (!flags.some(g => !g.done && !g.mark)) toast('¡Libreta completa! Regresa al campamento.', 4);
 }
 function updateReveal(dt) {
@@ -519,11 +705,11 @@ function updateReveal(dt) {
     const f = flags[reveal.i++];
     if (f.done) return;
     const ok = Math.abs(f.mark.steps - f.route.steps) <= TOL_STEPS && angDiff(f.mark.deg, f.route.deg) <= TOL_DEG;
-    if (ok) { f.done = true; f.result = 'ok'; } else { f.result = 'mal'; f.mark = null; }
+    if (ok) { f.done = true; f.result = 'ok'; } else { f.result = 'mal'; f.mark = null; f.unlocked = false; } // si falla, hay que hacer otro reto
   } else if (reveal.t > 1.6) {
     reveal = null;
     if (flags.every(f => f.done)) { book = false; state = 'win'; }
-    else toast('Las que salieron mal se borraron: búscalas otra vez.', 5);
+    else toast('Las que salieron mal se borraron: haz otro reto y búscalas otra vez.', 5);
   }
 }
 
@@ -542,9 +728,9 @@ function drawBook() {
     const y = y0 + 110 + i * 52;
     const checking = reveal && reveal.i === i + 1 && reveal.t < 0.9 || reveal && reveal.i <= i;
     ctx.textAlign = 'left'; ctx.fillStyle = '#3a2a14'; ctx.font = 'bold 16px sans-serif';
-    ctx.fillText(`Bandera ${f.n}`, x0 + 24, y);
+    ctx.fillText(`Base ${f.n}`, x0 + 24, y);
     ctx.font = '14px sans-serif'; ctx.fillStyle = '#6b5a3a';
-    ctx.fillText(`Pista: ${f.route.deg}° y ${f.route.steps} pasos`, x0 + 24, y + 20);
+    ctx.fillText(f.unlocked || f.done ? `Pista: ${f.route.deg}° y ${f.route.steps} pasos` : 'Pista: ??? (resuelve el reto)', x0 + 24, y + 20);
     ctx.textAlign = 'right'; ctx.font = 'bold 15px sans-serif';
     let txt, col;
     if (f.done) { txt = '✓ ¡Encontrada!'; col = '#2e8b3a'; }
@@ -582,7 +768,7 @@ function update(dt) {
   toasts = toasts.filter(t => t.t > 0);
   if (touch.flash && (touch.flash.t -= dt) <= 0) touch.flash = null;
   if (state === 'play' && reveal) { updateReveal(dt); return; }
-  if (state !== 'play' || mapOpen || book) return;
+  if (state !== 'play' || mapOpen || book || reto) return;
   playTime += dt;
 
   // Tiempo y días
@@ -646,12 +832,10 @@ function update(dt) {
     if (flags.some(f => !f.done) && flags.every(f => f.done || f.mark) && dist(player, CAMP) < CAMP_ZONE) {
       book = true; mapOpen = false; reveal = { t: 0, i: 0 };
     }
-  } else for (const f of flags) {
-    if (!f.done && dist(player, f) < 55) {
-      f.done = true;
-      const left = flags.filter(f => !f.done).length;
-      toast(left ? '🚩 ¡Bandera ' + f.n + ' encontrada! Faltan ' + left + '.' : '🚩 ¡Todas las banderas! Regresa al campamento.', 4);
-    }
+  } else for (const f of flags) { // al llegar a una base se abre su reto
+    const d = dist(player, f);
+    if (f.wait && d > 120) f.wait = false; // si saliste del reto, se vuelve a abrir al regresar
+    if (!f.done && !f.wait && d < 60) { openReto(f); break; }
   }
   if (flags.every(f => f.done) && dist(player, CAMP) < 120) { state = 'win'; return; }
 
@@ -1020,7 +1204,7 @@ function drawHUD() {
   };
   if (isTouch) { // las banderas debajo de la brújula y las pistas a un lado, así no chocan con los botones
     ctx.fillStyle = '#fff';
-    ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, cy + R + 24);
+    ctx.fillText(`Bases: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, cy + R + 24);
   }
   let py = !isTouch ? cy + R + 29 : H > W ? 196 : cy - R + 6;
   if (cat.hint === 'grados' || cat.hint === 'ruta') { pill('Rumbo: ' + bearingOfAngle(player.ang) + '°', py); py += 28; } // categorías que usan grados
@@ -1028,7 +1212,7 @@ function drawHUD() {
   pill('Ve a: ' + tg.name, py); py += 28;
   if (tg.hint) { pill(tg.hint, py); py += 28; }
   ctx.fillStyle = '#fff';
-  if (!isTouch) ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, py - 1);
+  if (!isTouch) ctx.fillText(`Bases: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, py - 1);
 
   // Aviso de interacción
   const n = nearInteract();
@@ -1049,12 +1233,12 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   });
   if (isTouch) { // en celular: botones en vez de minimapa y lista de teclas
-    if (state === 'play' && !mapOpen && !book) drawTouchControls();
+    if (state === 'play' && !mapOpen && !book && !reto) drawTouchControls();
     return;
   }
   ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'left';
   ctx.fillText(`${bindKey('adelante')}/${bindKey('atras')}: caminar · ${bindKey('izquierda')}/${bindKey('derecha')}: girar · mouse: mirar · ${bindKey('usar')}: usar · ${bindKey('comer')}: comer · ${bindKey('mapa')}: mapa${cat.hint === 'ruta' ? ` · ${bindKey('marcar')}: marcar · ${bindKey('libreta')}: libreta` : ''} · Esc: menú`, 14, H - 12);
-  if (!mouseLocked() && !mapOpen && !book && state === 'play') {
+  if (!mouseLocked() && !mapOpen && !book && !reto && state === 'play') {
     ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillText('Haz clic para mirar con el mouse', W / 2, 30);
   }
@@ -1154,7 +1338,7 @@ function drawTitle() {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 46px sans-serif'; ctx.fillText('Campamento Scout', 0, -235);
   ctx.fillStyle = '#fff'; ctx.font = '18px sans-serif';
-  ctx.fillText('Explora el bosque, encuentra las 5 banderas y mantén viva la fogata.', 0, -198);
+  ctx.fillText('Explora el bosque, completa los retos de las 5 bases y mantén viva la fogata.', 0, -198);
   ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 20px sans-serif'; ctx.fillText('Elige tu categoría', 0, -150);
   CATEGORIES.forEach((c, i) => {
     const x = -430 + i * 220, y = -125, w = 200, h = 270, sel = i === settings.cat;
@@ -1222,13 +1406,13 @@ function drawMenu() {
   ctx.font = '13px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'right';
   ctx.fillText('Haz clic en una tecla y luego pulsa la nueva', 300, -10);
   Object.keys(DEFAULT_BINDS).forEach((a, i) => {
-    const col = i < 6 ? -300 : 10, y = 8 + (i % 6) * 34;
+    const col = i < 7 ? -300 : 10, y = 8 + (i % 7) * 31;
     ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(BIND_NAMES[a], col, y + 20);
     const waiting = waitingBind === a;
     button(col + 180, y, 100, 30, waiting ? '...' : bindKey(a), () => { waitingBind = a; }, waiting);
   });
-  button(-120, 222, 240, 36, 'Restablecer controles', () => { settings.binds = { ...DEFAULT_BINDS }; saveSettings(); });
+  button(-120, 232, 240, 34, 'Restablecer controles', () => { settings.binds = { ...DEFAULT_BINDS }; saveSettings(); });
 
   ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(waitingBind ? 'Pulsa la tecla nueva (Esc para cancelar)' : 'Esc: volver al juego', 0, 280);
@@ -1261,9 +1445,10 @@ function draw() {
   drawHUD();
   if (mapOpen && state === 'play') drawBigMap();
   if (book && state === 'play') drawBook();
+  if (reto && state === 'play') drawReto(); else retoInput.style.display = 'none';
   const mins = Math.floor(playTime / 60), secs = Math.floor(playTime % 60);
   if (state === 'menu') drawMenu();
-  if (state === 'win') screen('¡Insignia de Explorador!', [`Encontraste las ${NUM_FLAGS} banderas y volviste al campamento.`, `${cat.name} (${cat.diff}) · Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', isTouch ? 'Toca la pantalla para volver' : 'ENTER: jugar otra vez · Esc: elegir otra categoría']);
+  if (state === 'win') screen('¡Insignia de Explorador!', [`Completaste las ${NUM_FLAGS} bases y volviste al campamento.`, `${cat.name} (${cat.diff}) · Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', isTouch ? 'Toca la pantalla para volver' : 'ENTER: jugar otra vez · Esc: elegir otra categoría']);
   if (state === 'lose') screen('Te quedaste sin energía', ['Come bayas con [' + keyHint('comer') + '] y quédate cerca de la fogata en la noche.', '', isTouch ? 'Toca la pantalla para volver' : 'ENTER: intentarlo otra vez · Esc: elegir otra categoría']);
 }
 
