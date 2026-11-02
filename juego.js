@@ -220,7 +220,7 @@ function startGame() {
   rain = false; rainTimer = 0; nextRain = (70 + Math.random() * 60) * cat.rain;
   toasts = []; playTime = 0; drops = []; mapOpen = false; book = false; reveal = null;
   state = 'play';
-  if (cat.hint === 'ruta') toast(`Sigue el rumbo y los pasos desde la fogata. Marca con ${bindKey('marcar')} donde creas que está cada bandera.`, 7);
+  if (cat.hint === 'ruta') toast(`Sigue el rumbo y los pasos desde la fogata. Marca con ${keyHint('marcar')} donde creas que está cada bandera.`, 7);
   else toast('Encuentra las 5 banderas con la brújula. ¡No dejes que se apague la fogata!', 6);
 }
 
@@ -266,6 +266,8 @@ cat = CATEGORIES[settings.cat] || CATEGORIES[1];
 function saveSettings() { try { localStorage.setItem('scout_ajustes', JSON.stringify(settings)); } catch (e) { /* no se pudo guardar */ } }
 const keyName = k => ({ ' ': 'Espacio', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→', shift: 'Shift', control: 'Ctrl', alt: 'Alt', tab: 'Tab', enter: 'Enter', backspace: 'Borrar' }[k] || k.toUpperCase());
 const bindKey = a => keyName(settings.binds[a]);
+// En celular se nombra el botón en vez de la tecla
+const keyHint = a => isTouch ? ({ usar: 'Usar', comer: 'Comer', marcar: 'Marcar', libreta: 'Libreta', mapa: 'Mapa' }[a] || bindKey(a)) : bindKey(a);
 function rebind(action, k) {
   const other = Object.keys(settings.binds).find(a => a !== action && settings.binds[a] === k);
   if (other) settings.binds[other] = settings.binds[action]; // si la tecla ya se usaba, se intercambian
@@ -315,19 +317,25 @@ addEventListener('keydown', e => {
     return;
   }
   if (state === 'play') {
-    if (k === settings.binds.usar) interact();
-    if (k === settings.binds.comer) eat();
-    if (k === settings.binds.mapa && !book) mapOpen = !mapOpen;
-    if (cat.hint === 'ruta') {
-      if (k === settings.binds.libreta && !reveal) { book = !book; mapOpen = false; }
-      if (k === settings.binds.marcar && !book) markFlag();
-      if (k === 'backspace' && book && !reveal) { // borrar la última marca
-        const m = flags.filter(f => !f.done && f.mark).pop();
-        if (m) { m.mark = null; toast('Borraste la marca de la Bandera ' + m.n + '.'); }
-      }
-    }
+    for (const a of ['usar', 'comer', 'mapa', 'libreta', 'marcar']) if (k === settings.binds[a]) doAction(a);
+    if (k === 'backspace' && book && !reveal) eraseLastMark();
   }
 });
+// Acciones del juego (las usan el teclado y los botones táctiles)
+function doAction(a) {
+  if (a === 'usar') interact();
+  if (a === 'comer') eat();
+  if (a === 'mapa' && !book) mapOpen = !mapOpen;
+  if (a === 'menu') openMenu();
+  if (cat.hint === 'ruta') {
+    if (a === 'libreta' && !reveal) { book = !book; mapOpen = false; }
+    if (a === 'marcar' && !book) markFlag();
+  }
+}
+function eraseLastMark() {
+  const m = flags.filter(f => !f.done && f.mark).pop();
+  if (m) { m.mark = null; toast('Borraste la marca de la Bandera ' + m.n + '.'); }
+}
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
 let dragSlider = null;
@@ -336,28 +344,124 @@ function pickCategory(i) {
   cat = CATEGORIES[settings.cat];
   saveSettings();
 }
-cv.addEventListener('mousedown', e => {
+// Clic (o toque) en las pantallas de título, menú, mapa y libreta. Devuelve true si lo usó.
+function tapAt(cx, cy) {
+  const inside = h => cx >= h.x && cx <= h.x + h.w && cy >= h.y && cy <= h.y + h.h;
   if (state === 'title') { // clic en una tarjeta la elige; clic en la ya elegida (o en Empezar) arranca
-    for (const h of menuHits) if (e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h) { h.fn(); break; }
-    return;
+    for (const h of menuHits) if (inside(h)) { h.fn(); break; }
+    return true;
   }
   if (state === 'menu') {
-    for (const h of menuHits) {
-      if (e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h) {
-        h.fn(e.clientX);
-        if (h.slider) dragSlider = h;
-        break;
-      }
-    }
-    return;
+    for (const h of menuHits) if (inside(h)) { h.fn(cx); if (h.slider) dragSlider = h; break; }
+    return true;
   }
-  if (state !== 'play') return;
-  if (mapOpen) { mapOpen = false; return; }
-  if (book) { if (!reveal) book = false; return; }
+  if (state === 'win' || state === 'lose') { if (isTouch) state = 'title'; return true; }
+  if (state !== 'play') return true;
+  if (mapOpen) { mapOpen = false; return true; }
+  if (book) {
+    if (reveal) return true;
+    if (bookErase && inside(bookErase)) eraseLastMark(); else book = false;
+    return true;
+  }
+  return false;
+}
+cv.addEventListener('mousedown', e => {
+  if (tapAt(e.clientX, e.clientY)) return;
   const { x, y } = miniRect();
   if (e.clientX >= x && e.clientX <= x + MAP && e.clientY >= y && e.clientY <= y + MAP) { mapOpen = true; return; }
   lockMouse();
 });
+
+// ---------- Controles táctiles (celular) ----------
+// Mitad izquierda: palanca para caminar y girar. Resto: arrastrar para mirar. Botones a la derecha.
+let isTouch = matchMedia('(pointer: coarse)').matches; // también se activa al primer toque
+const touch = { stick: null, look: null, run: false, fwd: 0, turn: 0, flash: null };
+const STICK_R = 60;
+function touchButtons() {
+  const b = [];
+  const add = (id, label, x, y, r = 32) => b.push({ id, label, x, y, r });
+  add('usar', 'Usar', W - 70, H - 72, 38);
+  add('correr', 'Correr', W - 70, H - 158, 30);
+  add('comer', 'Comer', W - 158, H - 50, 30);
+  if (cat.hint === 'ruta') { add('marcar', 'Marcar', W - 152, H - 130, 30); add('libreta', 'Libreta', H > W ? W - 70 : W - 240, H > W ? H - 240 : H - 50, 30); }
+  if (H > W) { add('mapa', 'Mapa', W - 120, 206, 24); add('menu', 'Menú', W - 54, 206, 24); } // vertical: debajo de la brújula
+  else { add('mapa', 'Mapa', W / 2 - 46, 30, 24); add('menu', 'Menú', W / 2 + 46, 30, 24); }
+  return b;
+}
+function touchPress(id) {
+  touch.flash = { id, t: 0.15 };
+  if (id === 'correr') { touch.run = !touch.run; return; }
+  doAction(id);
+}
+function stickMove(s) {
+  let dx = s.x - s.ox, dy = s.y - s.oy;
+  const d = Math.hypot(dx, dy);
+  if (d > STICK_R) { s.ox = s.x - dx / d * STICK_R; s.oy = s.y - dy / d * STICK_R; dx = s.x - s.ox; dy = s.y - s.oy; } // la base sigue al dedo
+  const dead = v => Math.abs(v) < 0.18 ? 0 : v;
+  touch.fwd = dead(-dy / STICK_R); touch.turn = dead(dx / STICK_R);
+}
+cv.addEventListener('touchstart', e => {
+  e.preventDefault(); isTouch = true;
+  for (const t of e.changedTouches) {
+    const x = t.clientX, y = t.clientY;
+    if (tapAt(x, y)) continue;
+    const btn = touchButtons().find(b => Math.hypot(x - b.x, y - b.y) < b.r + 10);
+    if (btn) { touchPress(btn.id); continue; }
+    if (x < W * 0.45 && !touch.stick) { touch.stick = { id: t.identifier, ox: x, oy: y, x, y }; stickMove(touch.stick); }
+    else if (!touch.look) touch.look = { id: t.identifier, x, y };
+  }
+}, { passive: false });
+cv.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    const x = t.clientX, y = t.clientY;
+    if (dragSlider && state === 'menu') dragSlider.fn(x);
+    if (touch.stick && touch.stick.id === t.identifier) { touch.stick.x = x; touch.stick.y = y; stickMove(touch.stick); }
+    if (touch.look && touch.look.id === t.identifier && state === 'play' && !mapOpen && !book) {
+      const k = settings.sens * 0.0012;
+      player.ang += (x - touch.look.x) * k;
+      player.pitch = clamp(player.pitch - (y - touch.look.y) * k * (settings.invert ? -1 : 1), -0.5, 0.5);
+      touch.look.x = x; touch.look.y = y;
+    }
+  }
+}, { passive: false });
+function touchEnd(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (touch.stick && touch.stick.id === t.identifier) { touch.stick = null; touch.fwd = touch.turn = 0; }
+    if (touch.look && touch.look.id === t.identifier) touch.look = null;
+  }
+  if (!e.touches.length) dragSlider = null;
+}
+cv.addEventListener('touchend', touchEnd, { passive: false });
+cv.addEventListener('touchcancel', touchEnd, { passive: false });
+
+function drawTouchControls() {
+  ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // palanca
+  const s = touch.stick, bx = s ? s.ox : 100, by = s ? s.oy : H - 100;
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(bx, by, STICK_R, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.arc(s ? s.x : bx, s ? s.y : by, 26, 0, 7); ctx.fill();
+  if (!s) { ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '12px sans-serif'; ctx.fillText('caminar', bx, by + STICK_R + 14); }
+  // botones
+  for (const b of touchButtons()) {
+    const on = (b.id === 'correr' && touch.run) || (touch.flash && touch.flash.id === b.id);
+    ctx.fillStyle = on ? 'rgba(224,162,58,0.85)' : 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.stroke();
+    ctx.fillStyle = on ? '#222' : '#fff'; ctx.font = `bold ${b.r > 30 ? 14 : 11}px sans-serif`;
+    ctx.fillText(b.label, b.x, b.y);
+  }
+  if (H > W) { // en vertical casi no cabe: sugerir girar el celular
+    ctx.font = 'bold 13px sans-serif';
+    const msg = '📱 Gira el celular para jugar mejor', w = ctx.measureText(msg).width + 20;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(W / 2 - w / 2, H * 0.62, w, 24, 8); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText(msg, W / 2, H * 0.62 + 12);
+  }
+  ctx.restore();
+}
 addEventListener('mousemove', e => {
   if (dragSlider && state === 'menu') dragSlider.fn(e.clientX);
   if (mouseLocked() && state === 'play' && !mapOpen && !book) {
@@ -372,7 +476,7 @@ document.addEventListener('pointerlockchange', () => { if (!mouseLocked() && sta
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') openMenu(); });
 
 function nearInteract() {
-  const u = '[' + bindKey('usar') + '] ';
+  const u = '[' + keyHint('usar') + '] ';
   if (dist(player, CAMP) < 80) return { kind: 'fire', label: wood > 0 ? u + 'Echar leña' : 'Necesitas leña' };
   for (const b of bushes) if (b.berries > 0 && dist(player, b) < b.r + 30) return { kind: 'bush', obj: b, label: u + 'Recoger bayas' };
   return null;
@@ -398,7 +502,7 @@ function interact() {
 
 // ---------- Libreta (Rover) ----------
 // Marcas donde crees que está la bandera; al volver al campamento se revisan en orden del 1 al 5.
-let book = false, reveal = null;
+let book = false, reveal = null, bookErase = null; // bookErase: botón táctil de borrar marca
 function markFlag() {
   if (dist(player, CAMP) < CAMP_ZONE) { toast('Sal del campamento para marcar.'); return; }
   const f = flags.find(f => !f.done && !f.mark);
@@ -452,7 +556,17 @@ function drawBook() {
     ctx.fillStyle = col; ctx.fillText(txt, x0 + w - 24, y + 10);
   });
   ctx.textAlign = 'center'; ctx.font = '13px sans-serif'; ctx.fillStyle = '#6b5a3a';
-  ctx.fillText(reveal ? 'Revisando...' : `${bindKey('libreta')} o clic: cerrar · Borrar: quitar la última marca`, W / 2, y0 + h - 18);
+  bookErase = null;
+  if (isTouch && !reveal && flags.some(f => !f.done && f.mark)) { // botón para borrar la última marca
+    bookErase = { x: x0 + w - 190, y: y0 + h - 44, w: 170, h: 30 };
+    ctx.fillStyle = '#c0392b'; roundRect(bookErase.x, bookErase.y, bookErase.w, bookErase.h, 8); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Borrar última marca', bookErase.x + bookErase.w / 2, bookErase.y + 20);
+    ctx.textAlign = 'left'; ctx.font = '13px sans-serif'; ctx.fillStyle = '#6b5a3a';
+    ctx.fillText('Toca afuera para cerrar', x0 + 20, y0 + h - 24);
+    return;
+  }
+  ctx.fillText(reveal ? 'Revisando...' : isTouch ? 'Toca para cerrar' : `${bindKey('libreta')} o clic: cerrar · Borrar: quitar la última marca`, W / 2, y0 + h - 18);
 }
 
 function eat() {
@@ -466,6 +580,7 @@ function eat() {
 function update(dt) {
   for (const t of toasts) t.t -= dt;
   toasts = toasts.filter(t => t.t > 0);
+  if (touch.flash && (touch.flash.t -= dt) <= 0) touch.flash = null;
   if (state === 'play' && reveal) { updateReveal(dt); return; }
   if (state !== 'play' || mapOpen || book) return;
   playTime += dt;
@@ -492,7 +607,8 @@ function update(dt) {
   if (down('atras')) fwd--;
   if (down('arriba')) look++;
   if (down('abajo')) look--;
-  const running = down('correr') && fwd > 0;
+  turn = clamp(turn + touch.turn, -1, 1); fwd = clamp(fwd + touch.fwd, -1, 1); // palanca táctil
+  const running = (down('correr') || touch.run) && fwd > 0;
   player.ang += turn * (0.6 + settings.giro * 0.34) * dt;
   player.pitch = clamp(player.pitch + look * 1.1 * dt, -0.5, 0.5);
   player.moving = fwd !== 0;
@@ -553,7 +669,7 @@ function update(dt) {
   if (rain) drain *= 1.15;
   energy -= dt * drain;
   if (cold && Math.random() < dt / 20) toast('Tienes frío... acércate a la fogata.');
-  if (energy <= 25 && energy + dt * drain > 25) toast('Tienes mucha hambre. Come algo con [' + bindKey('comer') + '].', 4);
+  if (energy <= 25 && energy + dt * drain > 25) toast('Tienes mucha hambre. Come algo con [' + keyHint('comer') + '].', 4);
   if (energy <= 0) { energy = 0; state = 'lose'; }
 
   // Gotas de lluvia
@@ -896,17 +1012,23 @@ function drawHUD() {
   ctx.textBaseline = 'alphabetic';
   ctx.font = 'bold 13px sans-serif';
   const pill = (text, y) => {
-    const w = ctx.measureText(text).width + 20, x = Math.min(cx - w / 2, W - 12 - w);
+    const w = ctx.measureText(text).width + 20;
+    // en celular van a la izquierda de la brújula (o abajo a la izquierda si está en vertical)
+    const x = !isTouch ? Math.min(cx - w / 2, W - 12 - w) : H > W ? 12 : cx - R - 16 - w;
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(x, y - 17, w, 24, 8); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText(text, x + w / 2, y);
   };
-  let py = cy + R + 29;
+  if (isTouch) { // las banderas debajo de la brújula y las pistas a un lado, así no chocan con los botones
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, cy + R + 24);
+  }
+  let py = !isTouch ? cy + R + 29 : H > W ? 196 : cy - R + 6;
   if (cat.hint === 'grados' || cat.hint === 'ruta') { pill('Rumbo: ' + bearingOfAngle(player.ang) + '°', py); py += 28; } // categorías que usan grados
   if (cat.hint === 'ruta') { pill('Pasos desde la fogata: ' + stepsFromCamp(), py); py += 28; }
   pill('Ve a: ' + tg.name, py); py += 28;
   if (tg.hint) { pill(tg.hint, py); py += 28; }
   ctx.fillStyle = '#fff';
-  ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, py - 1);
+  if (!isTouch) ctx.fillText(`Banderas: ${flags.filter(f => f.done).length}/${NUM_FLAGS}`, cx, py - 1);
 
   // Aviso de interacción
   const n = nearInteract();
@@ -919,13 +1041,17 @@ function drawHUD() {
   // Mensajes
   ctx.font = 'bold 17px sans-serif';
   toasts.forEach((t, i) => {
-    const y = H - 40 - (toasts.length - 1 - i) * 36;
+    const y = isTouch ? (H > W ? H * 0.42 : 100) + i * 36 :H - 40 - (toasts.length - 1 - i) * 36; // en celular arriba, para no tapar los botones
     ctx.globalAlpha = Math.min(1, t.t * 2);
     const w = ctx.measureText(t.text).width + 28;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(W / 2 - w / 2, y - 22, w, 32, 10); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText(t.text, W / 2, y);
     ctx.globalAlpha = 1;
   });
+  if (isTouch) { // en celular: botones en vez de minimapa y lista de teclas
+    if (state === 'play' && !mapOpen && !book) drawTouchControls();
+    return;
+  }
   ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'left';
   ctx.fillText(`${bindKey('adelante')}/${bindKey('atras')}: caminar · ${bindKey('izquierda')}/${bindKey('derecha')}: girar · mouse: mirar · ${bindKey('usar')}: usar · ${bindKey('comer')}: comer · ${bindKey('mapa')}: mapa${cat.hint === 'ruta' ? ` · ${bindKey('marcar')}: marcar · ${bindKey('libreta')}: libreta` : ''} · Esc: menú`, 14, H - 12);
   if (!mouseLocked() && !mapOpen && !book && state === 'play') {
@@ -985,7 +1111,7 @@ function drawBigMap() {
   windRose(x0 + 62, y0 + 62, 42, true);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 20px sans-serif'; ctx.fillText('Mapa del bosque', W / 2, y0 - 20);
-  ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.fillText('M o clic para cerrar', W / 2, y0 + size + 32);
+  ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.fillText(isTouch ? 'Toca para cerrar' : 'M o clic para cerrar', W / 2, y0 + size + 32);
 }
 
 function drawRain() {
@@ -1046,7 +1172,7 @@ function drawTitle() {
   ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 20px sans-serif'; ctx.fillText('Empezar', 0, 202);
   hit(-110, 172, 220, 46, startGame);
   ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '14px sans-serif';
-  ctx.fillText('← → o 1-4 para elegir · ENTER para empezar', 0, 245);
+  ctx.fillText(isTouch ? 'Toca una categoría para elegirla' : '← → o 1-4 para elegir · ENTER para empezar', 0, 245);
   ctx.restore();
 }
 
@@ -1137,8 +1263,8 @@ function draw() {
   if (book && state === 'play') drawBook();
   const mins = Math.floor(playTime / 60), secs = Math.floor(playTime % 60);
   if (state === 'menu') drawMenu();
-  if (state === 'win') screen('¡Insignia de Explorador!', [`Encontraste las ${NUM_FLAGS} banderas y volviste al campamento.`, `${cat.name} (${cat.diff}) · Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', 'ENTER: jugar otra vez · Esc: elegir otra categoría']);
-  if (state === 'lose') screen('Te quedaste sin energía', ['Come bayas con [' + bindKey('comer') + '] y quédate cerca de la fogata en la noche.', '', 'ENTER: intentarlo otra vez · Esc: elegir otra categoría']);
+  if (state === 'win') screen('¡Insignia de Explorador!', [`Encontraste las ${NUM_FLAGS} banderas y volviste al campamento.`, `${cat.name} (${cat.diff}) · Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', isTouch ? 'Toca la pantalla para volver' : 'ENTER: jugar otra vez · Esc: elegir otra categoría']);
+  if (state === 'lose') screen('Te quedaste sin energía', ['Come bayas con [' + keyHint('comer') + '] y quédate cerca de la fogata en la noche.', '', isTouch ? 'Toca la pantalla para volver' : 'ENTER: intentarlo otra vez · Esc: elegir otra categoría']);
 }
 
 let last = performance.now();
