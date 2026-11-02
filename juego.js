@@ -196,7 +196,7 @@ let cat = CATEGORIES[1]; // se cambia a la guardada cuando se cargan los ajustes
 const DAY_LEN = 240; // segundos por día completo
 let state = 'title';
 let player, fire, time, day, energy, wood, food, rain, rainTimer, nextRain, playTime;
-let menuHits = [], waitingBind = null; // botones del menú de Esc y control que se está cambiando
+let menuHits = [], waitingBind = null, confirmExit = false; // botones del menú de Esc y control que se está cambiando
 let toasts = [], drops = [];
 
 function startGame() {
@@ -254,11 +254,12 @@ const keys = {};
 let menuOpenedAt = 0;
 const mouseLocked = () => document.pointerLockElement === cv;
 function openMenu() {
-  state = 'menu'; waitingBind = null; menuOpenedAt = performance.now();
+  state = 'menu'; waitingBind = null; confirmExit = false; menuOpenedAt = performance.now();
   for (const k in keys) keys[k] = false;
   if (mouseLocked()) document.exitPointerLock();
 }
-function closeMenu() { state = 'play'; waitingBind = null; }
+function closeMenu() { state = 'play'; waitingBind = null; confirmExit = false; }
+function exitToTitle() { state = 'title'; confirmExit = false; player = null; mapOpen = false; }
 function lockMouse() {
   if (!cv.requestPointerLock || mouseLocked()) return;
   const p = cv.requestPointerLock();
@@ -285,6 +286,7 @@ addEventListener('keydown', e => {
   if (k === 'escape' && (state === 'win' || state === 'lose')) { state = 'title'; return; }
   if (k === 'escape') {
     if (state === 'play') { if (mapOpen) mapOpen = false; else openMenu(); }
+    else if (state === 'menu' && confirmExit) confirmExit = false;
     else if (state === 'menu' && performance.now() - menuOpenedAt > 300) closeMenu();
     return;
   }
@@ -932,8 +934,8 @@ function drawMenu() {
   ctx.fillStyle = '#2a3a2c'; roundRect(-330, -310, 660, 620, 18); ctx.fill();
   ctx.strokeStyle = '#8e7a4a'; ctx.lineWidth = 3; ctx.stroke();
 
-  const button = (x, y, w, h, text, fn, active) => {
-    ctx.fillStyle = active ? '#e0a23a' : '#4a5f45'; roundRect(x, y, w, h, 9); ctx.fill();
+  const button = (x, y, w, h, text, fn, active, color) => {
+    ctx.fillStyle = color || (active ? '#e0a23a' : '#4a5f45'); roundRect(x, y, w, h, 9); ctx.fill();
     ctx.fillStyle = active ? '#222' : '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(text, x + w / 2, y + h / 2 + 6);
     hit(x, y, w, h, fn);
@@ -955,7 +957,8 @@ function drawMenu() {
 
   ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText('Menú', 0, -265);
-  button(-110, -245, 220, 40, 'Continuar', () => { closeMenu(); lockMouse(); });
+  button(-230, -245, 220, 40, 'Continuar', () => { closeMenu(); lockMouse(); });
+  button(10, -245, 220, 40, 'Salir al menú', () => { confirmExit = true; waitingBind = null; }, false, '#c0392b');
 
   header('Sensibilidad', -170);
   slider('Mouse', -138, 'sens');
@@ -977,6 +980,19 @@ function drawMenu() {
 
   ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(waitingBind ? 'Pulsa la tecla nueva (Esc para cancelar)' : 'Esc: volver al juego', 0, 280);
+
+  if (confirmExit) { // ventanita para confirmar: tapa el resto del menú y solo deja estos dos botones
+    menuHits = [];
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(-W / s, -H / s, 2 * W / s, 2 * H / s);
+    ctx.fillStyle = '#2a3a2c'; roundRect(-220, -95, 440, 190, 16); ctx.fill();
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('¿Salir al menú?', 0, -45);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = '15px sans-serif';
+    ctx.fillText('Se perderá lo que llevas de esta partida.', 0, -12);
+    button(-190, 25, 180, 44, 'Sí, salir', exitToTitle, false, '#c0392b');
+    button(10, 25, 180, 44, 'Cancelar', () => { confirmExit = false; });
+  }
   ctx.restore();
 }
 
