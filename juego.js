@@ -1,4 +1,4 @@
-// Campamento Scout — exploración + supervivencia ligera, vista cenital (desde arriba)
+// Campamento Scout — exploración + supervivencia ligera, en primera persona con dibujos 2D
 
 const cv = document.getElementById('juego');
 const ctx = cv.getContext('2d');
@@ -123,6 +123,7 @@ function genWorld(seed) {
     const a = rnd() * 6.28, d = Math.sqrt(rnd()) * claro.r;
     decos.push({ x: claro.x + Math.cos(a) * d, y: claro.y + Math.sin(a) * d, k: 2, a: rnd() * 6.28 });
   }
+  decos = decos.filter(d => free(d.x, d.y, 0, lakes, 0)); // nada de pasto encima del agua
 
   solids = [...trees, ...rocks, ...lakes, ...tents, { x: CAMP.x, y: CAMP.y, r: 26 }];
   buildMap();
@@ -150,7 +151,10 @@ function buildMap() {
   const arbol = landmarks.find(l => l.kind === 'arbol');
   if (arbol) { circle(arbol.x, arbol.y, 135, '#2d5a26'); circle(arbol.x - 30, arbol.y - 30, 60, '#3f7a33'); }
   m.strokeStyle = 'rgba(60,40,20,0.6)'; m.lineWidth = 3; m.strokeRect(1.5, 1.5, MAP_RES - 3, MAP_RES - 3);
+  miniCv.width = miniCv.height = MAP; // copia ya achicada para el minimapa (más rápido de dibujar)
+  miniCv.getContext('2d').drawImage(mapCv, 0, 0, MAP, MAP);
 }
+const miniCv = document.createElement('canvas');
 
 // Dibuja el mapa en pantalla; con nombres solo cuando es grande (en chico no caben)
 function drawMapAt(x0, y0, size, labels) {
@@ -174,20 +178,36 @@ function placeStick() {
   }
 }
 
+// ---------- Categorías scout = dificultades (el color del uniforme es solo de adorno) ----------
+// energy/fire: qué tan rápido se gastan; rain: cada cuánto llueve (más bajo = más seguido)
+const CATEGORIES = [
+  { name: 'Lobezno/a', color: '#e8c23a', diff: 'Fácil', energy: 0.7, fire: 0.7, rain: 1.4, food: 4, hint: true,
+    desc: ['Te cansas más lento y la', 'fogata dura más. Empiezas', 'con bayas.'] },
+  { name: 'Tropero/a', color: '#3fae4a', diff: 'Normal', energy: 1, fire: 1, rain: 1, food: 2, hint: true,
+    desc: ['La aventura como es.', 'La brújula te da pistas.'] },
+  { name: 'Caminante', color: '#3b7bd9', diff: 'Difícil', energy: 1.25, fire: 1.25, rain: 0.8, food: 0, hint: false,
+    desc: ['Te cansas más rápido y', 'llueve más seguido.', 'La brújula no da pistas.'] },
+  { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire: 1.5, rain: 0.6, food: 0, hint: false,
+    desc: ['Todo se gasta rápido,', 'llueve mucho y no hay', 'pistas. ¡Suerte!'] },
+];
+let cat = CATEGORIES[1]; // se cambia a la guardada cuando se cargan los ajustes
+
 // ---------- Estado ----------
 const DAY_LEN = 240; // segundos por día completo
 let state = 'title';
 let player, fire, time, day, energy, wood, food, rain, rainTimer, nextRain, playTime;
+let menuHits = [], waitingBind = null; // botones del menú de Esc y control que se está cambiando
 let toasts = [], drops = [];
 
 function startGame() {
   player = null;
   genWorld(20261101);
-  player = { x: CAMP.x, y: CAMP.y + 90, ang: -Math.PI / 2, step: 0, moving: false };
+  player = { x: CAMP.x, y: CAMP.y + 200, ang: -Math.PI / 2, pitch: 0, step: 0, moving: false };
   fire = { fuel: 70 };
   time = 0.05; day = 1;
-  energy = 100; wood = 0; food = 0;
-  rain = false; rainTimer = 0; nextRain = 70 + Math.random() * 60;
+  cat = CATEGORIES[settings.cat] || CATEGORIES[1];
+  energy = 100; wood = 0; food = cat.food;
+  rain = false; rainTimer = 0; nextRain = (70 + Math.random() * 60) * cat.rain;
   toasts = []; playTime = 0; drops = []; mapOpen = false;
   state = 'play';
   toast('Encuentra las 5 banderas con la brújula. ¡No dejes que se apague la fogata!', 6);
@@ -207,35 +227,119 @@ const isNight = () => darkness() > 0.5;
 
 function target() {
   const f = flags.find(f => !f.done);
-  return f ? { x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: f.hint } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
+  return f ? { x: f.x, y: f.y, name: 'Bandera ' + f.n, hint: cat.hint ? f.hint : '' } : { x: CAMP.x, y: CAMP.y, name: 'Campamento', hint: '' };
+}
+
+// ---------- Ajustes (se guardan en este navegador) ----------
+const DEFAULT_BINDS = { adelante: 'w', atras: 's', izquierda: 'a', derecha: 'd', arriba: 'arrowup', abajo: 'arrowdown', correr: 'shift', usar: 'e', comer: 'f', mapa: 'm' };
+const BIND_NAMES = { adelante: 'Caminar adelante', atras: 'Caminar atrás', izquierda: 'Girar a la izquierda', derecha: 'Girar a la derecha', arriba: 'Mirar arriba', abajo: 'Mirar abajo', correr: 'Correr', usar: 'Usar / recoger', comer: 'Comer', mapa: 'Mapa' };
+let settings = { sens: 5, giro: 5, invert: false, cat: 1, binds: { ...DEFAULT_BINDS } };
+try {
+  const s = JSON.parse(localStorage.getItem('scout_ajustes'));
+  if (s) settings = { ...settings, ...s, binds: { ...DEFAULT_BINDS, ...s.binds } };
+} catch (e) { /* sin guardado: se usan los de siempre */ }
+cat = CATEGORIES[settings.cat] || CATEGORIES[1];
+function saveSettings() { try { localStorage.setItem('scout_ajustes', JSON.stringify(settings)); } catch (e) { /* no se pudo guardar */ } }
+const keyName = k => ({ ' ': 'Espacio', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→', shift: 'Shift', control: 'Ctrl', alt: 'Alt', tab: 'Tab', enter: 'Enter', backspace: 'Borrar' }[k] || k.toUpperCase());
+const bindKey = a => keyName(settings.binds[a]);
+function rebind(action, k) {
+  const other = Object.keys(settings.binds).find(a => a !== action && settings.binds[a] === k);
+  if (other) settings.binds[other] = settings.binds[action]; // si la tecla ya se usaba, se intercambian
+  settings.binds[action] = k;
+  saveSettings();
 }
 
 // ---------- Entrada ----------
 const keys = {};
+let menuOpenedAt = 0;
+const mouseLocked = () => document.pointerLockElement === cv;
+function openMenu() {
+  state = 'menu'; waitingBind = null; menuOpenedAt = performance.now();
+  for (const k in keys) keys[k] = false;
+  if (mouseLocked()) document.exitPointerLock();
+}
+function closeMenu() { state = 'play'; waitingBind = null; }
+function lockMouse() {
+  if (!cv.requestPointerLock || mouseLocked()) return;
+  const p = cv.requestPointerLock();
+  if (p && p.catch) p.catch(() => {}); // el navegador a veces no deja justo después de soltarlo
+}
+
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'tab'].includes(k)) e.preventDefault();
+  if (waitingBind) { // en el menú, esperando la tecla nueva para un control
+    e.preventDefault();
+    if (k !== 'escape') rebind(waitingBind, k);
+    waitingBind = null;
+    return;
+  }
   if (e.repeat) return;
   keys[k] = true;
-  if (k === 'enter' && state !== 'play') startGame();
+  if (k === 'enter' && (state === 'title' || state === 'win' || state === 'lose')) startGame();
+  if (state === 'title') { // elegir categoría con flechas, A/D o 1-4
+    if (k === 'arrowleft' || k === 'a') pickCategory(settings.cat - 1);
+    if (k === 'arrowright' || k === 'd') pickCategory(settings.cat + 1);
+    if (k >= '1' && k <= '4') pickCategory(+k - 1);
+  }
+  if (k === 'escape' && (state === 'win' || state === 'lose')) { state = 'title'; return; }
+  if (k === 'escape') {
+    if (state === 'play') { if (mapOpen) mapOpen = false; else openMenu(); }
+    else if (state === 'menu' && performance.now() - menuOpenedAt > 300) closeMenu();
+    return;
+  }
   if (state === 'play') {
-    if (k === 'e') interact();
-    if (k === 'f') eat();
-    if (k === 'p') state = 'pause';
-    if (k === 'm') mapOpen = !mapOpen;
-  } else if (state === 'pause' && k === 'p') state = 'play';
+    if (k === settings.binds.usar) interact();
+    if (k === settings.binds.comer) eat();
+    if (k === settings.binds.mapa) mapOpen = !mapOpen;
+  }
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
-cv.addEventListener('click', e => {
+
+let dragSlider = null;
+function pickCategory(i) {
+  settings.cat = clamp(i, 0, CATEGORIES.length - 1);
+  cat = CATEGORIES[settings.cat];
+  saveSettings();
+}
+cv.addEventListener('mousedown', e => {
+  if (state === 'title') { // clic en una tarjeta la elige; clic en la ya elegida (o en Empezar) arranca
+    for (const h of menuHits) if (e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h) { h.fn(); break; }
+    return;
+  }
+  if (state === 'menu') {
+    for (const h of menuHits) {
+      if (e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h) {
+        h.fn(e.clientX);
+        if (h.slider) dragSlider = h;
+        break;
+      }
+    }
+    return;
+  }
   if (state !== 'play') return;
+  if (mapOpen) { mapOpen = false; return; }
   const { x, y } = miniRect();
-  if (mapOpen || (e.clientX >= x && e.clientX <= x + MAP && e.clientY >= y && e.clientY <= y + MAP)) mapOpen = !mapOpen;
+  if (e.clientX >= x && e.clientX <= x + MAP && e.clientY >= y && e.clientY <= y + MAP) { mapOpen = true; return; }
+  lockMouse();
 });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') state = 'pause'; });
+addEventListener('mousemove', e => {
+  if (dragSlider && state === 'menu') dragSlider.fn(e.clientX);
+  if (mouseLocked() && state === 'play' && !mapOpen) {
+    const k = settings.sens * 0.0006;
+    player.ang += e.movementX * k;
+    player.pitch = clamp(player.pitch - e.movementY * k * (settings.invert ? -1 : 1), -0.5, 0.5);
+  }
+});
+addEventListener('mouseup', () => { dragSlider = null; });
+// Esc suelta el mouse (lo hace el navegador): en ese momento se abre el menú
+document.addEventListener('pointerlockchange', () => { if (!mouseLocked() && state === 'play') openMenu(); });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play') openMenu(); });
 
 function nearInteract() {
-  if (dist(player, CAMP) < 80) return { kind: 'fire', label: wood > 0 ? '[E] Echar leña' : 'Necesitas leña' };
-  for (const b of bushes) if (b.berries > 0 && dist(player, b) < b.r + 30) return { kind: 'bush', obj: b, label: '[E] Recoger bayas' };
+  const u = '[' + bindKey('usar') + '] ';
+  if (dist(player, CAMP) < 80) return { kind: 'fire', label: wood > 0 ? u + 'Echar leña' : 'Necesitas leña' };
+  for (const b of bushes) if (b.berries > 0 && dist(player, b) < b.r + 30) return { kind: 'bush', obj: b, label: u + 'Recoger bayas' };
   return null;
 }
 
@@ -278,27 +382,28 @@ function update(dt) {
   // Clima
   if (rain) {
     rainTimer -= dt;
-    if (rainTimer <= 0) { rain = false; nextRain = 90 + Math.random() * 120; toast('Dejó de llover.'); }
+    if (rainTimer <= 0) { rain = false; nextRain = (90 + Math.random() * 120) * cat.rain; toast('Dejó de llover.'); }
   } else {
     nextRain -= dt;
     if (nextRain <= 0) { rain = true; rainTimer = 30 + Math.random() * 35; toast('🌧 Empezó a llover: el fuego se gasta más rápido.', 4); }
   }
 
-  // Movimiento
-  let mx = 0, my = 0;
-  if (keys['a'] || keys['arrowleft']) mx--;
-  if (keys['d'] || keys['arrowright']) mx++;
-  if (keys['w'] || keys['arrowup']) my--;
-  if (keys['s'] || keys['arrowdown']) my++;
-  const running = keys['shift'];
-  player.moving = mx || my;
+  // Movimiento en primera persona: A/D giran, W/S caminan hacia adelante/atrás
+  const down = a => keys[settings.binds[a]];
+  let turn = 0, fwd = 0, look = 0;
+  if (down('izquierda')) turn--;
+  if (down('derecha')) turn++;
+  if (down('adelante')) fwd++;
+  if (down('atras')) fwd--;
+  if (down('arriba')) look++;
+  if (down('abajo')) look--;
+  const running = down('correr') && fwd > 0;
+  player.ang += turn * (0.6 + settings.giro * 0.34) * dt;
+  player.pitch = clamp(player.pitch + look * 1.1 * dt, -0.5, 0.5);
+  player.moving = fwd !== 0;
   if (player.moving) {
-    const l = Math.hypot(mx, my); mx /= l; my /= l;
-    const sp = (running ? 260 : 160) * (energy < 15 ? 0.6 : 1);
-    player.x += mx * sp * dt; player.y += my * sp * dt;
-    let da = Math.atan2(my, mx) - player.ang;
-    da = Math.atan2(Math.sin(da), Math.cos(da));
-    player.ang += da * Math.min(1, dt * 14);
+    const sp = (running ? 250 : 150) * (fwd < 0 ? 0.6 : 1) * (energy < 15 ? 0.6 : 1);
+    player.x += Math.cos(player.ang) * fwd * sp * dt; player.y += Math.sin(player.ang) * fwd * sp * dt;
     player.step += dt * (running ? 14 : 9);
   }
   // Choques (círculos)
@@ -337,19 +442,19 @@ function update(dt) {
 
   // Fogata
   if (fire.fuel > 0) {
-    fire.fuel -= dt * (rain ? 1.1 : 0.55);
+    fire.fuel -= dt * (rain ? 1.1 : 0.55) * cat.fire;
     if (fire.fuel <= 0) { fire.fuel = 0; toast('🔥 ¡Se apagó la fogata! Trae leña para prenderla.', 4); }
   }
 
   // Energía (hambre + frío)
   const cold = isNight() && (fire.fuel <= 0 || dist(player, CAMP) > 320);
-  let drain = 0.3;
+  let drain = 0.3 * cat.energy;
   if (running && player.moving) drain *= 1.8;
   if (cold) drain *= 1.6;
   if (rain) drain *= 1.15;
   energy -= dt * drain;
   if (cold && Math.random() < dt / 20) toast('Tienes frío... acércate a la fogata.');
-  if (energy <= 25 && energy + dt * drain > 25) toast('Tienes mucha hambre. Come algo con [F].', 4);
+  if (energy <= 25 && energy + dt * drain > 25) toast('Tienes mucha hambre. Come algo con [' + bindKey('comer') + '].', 4);
   if (energy <= 0) { energy = 0; state = 'lose'; }
 
   // Gotas de lluvia
@@ -358,63 +463,277 @@ function update(dt) {
   drops = drops.filter(d => d.y < H + 20);
 }
 
-// ---------- Dibujo ----------
-// ZOOM: qué tan cerca está la cámara (más alto = se ve menos bosque a la vez)
-const ZOOM = 1.6;
-let cam = { x: 0, y: 0 }, VW = 0, VH = 0; // VW/VH = tamaño de la vista en unidades del mundo
-const onScreen = (x, y, r) => x + r > cam.x && x - r < cam.x + VW && y + r > cam.y && y - r < cam.y + VH;
+// ---------- Dibujo en primera persona ----------
+// No es 3D de verdad: el suelo es un degradado y todo (árboles, rocas...) son dibujos 2D de frente
+// que se hacen más chicos con la distancia. Lo lejano se ve más oscuro y borroso.
+const FOV = 1.6;          // ángulo de visión (radianes, ~92°); más grande = menos zoom
+const EYE = 55;           // altura de los ojos
+const FAR = 1500;         // más allá de esto ya no se dibuja nada (se pierde en la niebla)
+const FOG_STEPS = [320, 680, 1050]; // distancias donde cada cosa pasa al siguiente nivel de oscuro/borroso
+let HOR = 0, FOC = 1;     // altura del horizonte en pantalla y "zoom" de la cámara
 
-function drawGround() {
-  ctx.fillStyle = '#4f7a3a';
-  ctx.fillRect(0, 0, VW, VH);
-  // Borde del mundo
-  ctx.fillStyle = '#2a3f20';
-  if (cam.x < 0) ctx.fillRect(0, 0, -cam.x, VH);
-  if (cam.y < 0) ctx.fillRect(0, 0, VW, -cam.y);
-  if (cam.x + VW > WORLD) ctx.fillRect(WORLD - cam.x, 0, VW, VH);
-  if (cam.y + VH > WORLD) ctx.fillRect(0, WORLD - cam.y, VW, VH);
-  ctx.save();
-  ctx.translate(-cam.x, -cam.y);
-  // Claro del campamento
-  for (const l of landmarks) {
-    if (l.kind !== 'claro' && l.kind !== 'pinar') continue;
-    if (!onScreen(l.x, l.y, l.r)) continue;
-    ctx.fillStyle = l.kind === 'claro' ? '#64934a' : '#466f36';
-    ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, 7); ctx.fill();
+// --- Dibujos 2D (se pintan una vez, en 4 niveles de lejanía) ---
+const PAD = 8;
+function makeSprite(w, h, paint) {
+  const base = document.createElement('canvas');
+  base.width = w + PAD * 2; base.height = h + PAD * 2;
+  const b = base.getContext('2d');
+  b.translate(PAD, PAD); paint(b, w, h);
+  const levels = [];
+  const dark = [0, 0.22, 0.42, 0.6], blur = [0, 0.5, 1.4, 2.6];
+  for (let L = 0; L < 4; L++) {
+    const c = document.createElement('canvas');
+    c.width = base.width; c.height = base.height;
+    const g = c.getContext('2d');
+    if (blur[L]) g.filter = `blur(${blur[L]}px)`;
+    g.drawImage(base, 0, 0);
+    g.filter = 'none';
+    if (dark[L]) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = `rgba(14,26,24,${dark[L]})`; g.fillRect(0, 0, c.width, c.height); }
+    levels.push(c);
   }
-  ctx.fillStyle = '#8a7a52';
-  ctx.beginPath(); ctx.ellipse(CAMP.x, CAMP.y, 230, 210, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = '#9c8a5e';
-  ctx.beginPath(); ctx.ellipse(CAMP.x, CAMP.y, 150, 135, 0, 0, 7); ctx.fill();
-  for (const d of decos) {
-    if (!onScreen(d.x, d.y, 10)) continue;
-    if (Math.hypot(d.x - CAMP.x, d.y - CAMP.y) < 220) continue;
-    if (d.k === 0 || d.k === 1) { // pasto
-      ctx.strokeStyle = d.k ? '#5f8c45' : '#41682f'; ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = -1; i <= 1; i++) { ctx.moveTo(d.x + i * 3, d.y); ctx.lineTo(d.x + i * 5, d.y - 7); }
-      ctx.stroke();
-    } else if (d.k === 2) { // flor
-      ctx.fillStyle = ['#e8e3d0', '#e7c94a', '#c77dd6'][Math.floor(d.a) % 3];
-      ctx.beginPath(); ctx.arc(d.x, d.y, 2.5, 0, 7); ctx.fill();
-    } else { // hoja seca
-      ctx.fillStyle = '#7a6a3a';
-      ctx.beginPath(); ctx.ellipse(d.x, d.y, 4, 2, d.a, 0, 7); ctx.fill();
+  return { levels, w, h };
+}
+const blob = (g, x, y, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
+
+function paintOak(g, w, h, hue, light) {
+  g.fillStyle = '#5a3d24'; g.fillRect(w / 2 - w * 0.07, h * 0.45, w * 0.14, h * 0.55);
+  g.fillStyle = '#47301c'; g.fillRect(w / 2, h * 0.45, w * 0.07, h * 0.55);
+  const cx = w / 2, cy = h * 0.34, r = w * 0.3;
+  for (const [dx, dy, k] of [[-0.55, 0.25, 0.8], [0.55, 0.25, 0.8], [0, -0.35, 0.95], [-0.35, -0.1, 0.85], [0.4, -0.05, 0.85], [0, 0.3, 0.9]])
+    blob(g, cx + dx * r * 1.2, cy + dy * r * 1.2, r * k, `hsl(${hue},40%,${light}%)`);
+  for (const [dx, dy, k] of [[-0.3, -0.4, 0.5], [0.2, -0.55, 0.4], [-0.6, 0, 0.35]])
+    blob(g, cx + dx * r, cy + dy * r, r * k, `hsl(${hue - 5},45%,${light + 8}%)`);
+}
+function paintPine(g, w, h, light) {
+  g.fillStyle = '#4a3220'; g.fillRect(w / 2 - w * 0.06, h * 0.8, w * 0.12, h * 0.2);
+  for (let i = 0; i < 4; i++) {
+    const top = h * (0.02 + i * 0.19), bot = h * (0.36 + i * 0.16), half = w * (0.22 + i * 0.09);
+    g.fillStyle = `hsl(145,35%,${light + i * 2}%)`;
+    g.beginPath(); g.moveTo(w / 2, top); g.lineTo(w / 2 + half, bot); g.lineTo(w / 2 - half, bot); g.fill();
+    g.fillStyle = `hsl(145,35%,${light + 7 + i * 2}%)`;
+    g.beginPath(); g.moveTo(w / 2, top); g.lineTo(w / 2 - half, bot); g.lineTo(w / 2 - half * 0.3, bot); g.fill();
+  }
+}
+function paintRock(g, w, h, seed) {
+  g.fillStyle = '#6f716b'; g.beginPath();
+  for (let i = 0; i <= 8; i++) {
+    const a = Math.PI + i / 8 * Math.PI, rr = 0.85 + ((seed * 31 * (i + 1)) % 1) * 0.15;
+    g.lineTo(w / 2 + Math.cos(a) * w / 2 * rr, h + Math.sin(a) * h * rr);
+  }
+  g.fill();
+  g.fillStyle = '#9a9c95'; g.beginPath(); g.ellipse(w * 0.4, h * 0.45, w * 0.22, h * 0.22, 0, 0, 7); g.fill();
+}
+function paintBush(g, w, h, berries) {
+  for (const [dx, dy, r] of [[0.25, 0.65, 0.28], [0.75, 0.65, 0.28], [0.5, 0.45, 0.35], [0.5, 0.75, 0.3]])
+    blob(g, w * dx, h * dy, w * r, '#2f6b2a');
+  blob(g, w * 0.4, h * 0.38, w * 0.18, '#3f8a35');
+  for (let i = 0; i < berries * 4; i++) blob(g, w * (0.18 + ((i * 0.37) % 0.64)), h * (0.3 + ((i * 0.53) % 0.55)), w * 0.045, '#c4243a');
+}
+function paintTent(g, w, h, col) {
+  g.fillStyle = col; g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w, h); g.lineTo(0, h); g.fill();
+  g.fillStyle = 'rgba(0,0,0,0.2)'; g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w, h); g.lineTo(w / 2, h); g.fill();
+  g.fillStyle = '#2b2018'; g.beginPath(); g.moveTo(w / 2, h * 0.35); g.lineTo(w * 0.64, h); g.lineTo(w * 0.36, h); g.fill();
+}
+function paintFlag(g, w, h, done, n) {
+  g.fillStyle = '#6b4a2b'; g.fillRect(w * 0.15, 0, w * 0.08, h);
+  g.fillStyle = done ? '#3fae4a' : '#e0402c';
+  g.beginPath(); g.moveTo(w * 0.23, h * 0.03); g.lineTo(w, h * 0.17); g.lineTo(w * 0.23, h * 0.33); g.fill();
+  g.fillStyle = '#fff'; g.font = `bold ${Math.round(h * 0.16)}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(n, w * 0.5, h * 0.18);
+}
+function paintStick(g, w, h) {
+  g.strokeStyle = '#6b4a2b'; g.lineWidth = h * 0.6; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(2, h * 0.7); g.lineTo(w - 2, h * 0.4); g.moveTo(w * 0.6, h * 0.5); g.lineTo(w * 0.75, 0); g.stroke();
+}
+function paintTuft(g, w, h, kind) {
+  if (kind === 2) { // flor
+    g.strokeStyle = '#3f6b2c'; g.lineWidth = 2; g.beginPath(); g.moveTo(w / 2, h); g.lineTo(w / 2, h * 0.3); g.stroke();
+    blob(g, w / 2, h * 0.3, w * 0.25, ['#e8e3d0', '#e7c94a', '#c77dd6'][Math.floor(Math.random() * 3)]);
+    return;
+  }
+  g.strokeStyle = kind ? '#6a9a4a' : '#46703a'; g.lineWidth = 3; g.lineCap = 'round';
+  g.beginPath();
+  for (let i = -2; i <= 2; i++) { g.moveTo(w / 2 + i * w * 0.08, h); g.lineTo(w / 2 + i * w * 0.2, h * (0.1 + Math.abs(i) * 0.15)); }
+  g.stroke();
+}
+
+const SPR = {};
+function buildSprites() {
+  SPR.oak = [0, 1, 2].map(i => makeSprite(150, 230, (g, w, h) => paintOak(g, w, h, 95 + i * 12, 26 + i * 5)));
+  SPR.pine = [0, 1, 2].map(i => makeSprite(110, 260, (g, w, h) => paintPine(g, w, h, 17 + i * 4)));
+  SPR.giant = makeSprite(300, 460, (g, w, h) => paintOak(g, w, h, 100, 24));
+  SPR.rock = [0.13, 0.57].map(s => makeSprite(110, 70, (g, w, h) => paintRock(g, w, h, s)));
+  SPR.bush = [0, 1, 2, 3].map(n => makeSprite(80, 56, (g, w, h) => paintBush(g, w, h, n)));
+  SPR.tent = ['#d9813b', '#3b7bd9', '#c9b13a'].map(c => makeSprite(120, 80, (g, w, h) => paintTent(g, w, h, c)));
+  SPR.flag = [false, true].map(d => [1, 2, 3, 4, 5].map(n => makeSprite(60, 140, (g, w, h) => paintFlag(g, w, h, d, n))));
+  SPR.stick = makeSprite(40, 12, paintStick);
+  SPR.tuft = [0, 1, 2].map(k => makeSprite(24, 22, (g, w, h) => paintTuft(g, w, h, k)));
+}
+buildSprites();
+
+// Bosque lejano en el horizonte (dos capas que giran contigo, la de atrás más oscura y borrosa)
+const ridge = [0, 1].map(layer => {
+  const c = document.createElement('canvas'); c.width = 2400; c.height = 160;
+  const g = c.getContext('2d'), r = mulberry32(77 + layer);
+  if (layer === 1) g.filter = 'blur(2px)';
+  g.fillStyle = layer ? '#24382f' : '#1d3026';
+  for (let x = -40; x < c.width + 40; x += 18 + r() * 22) {
+    const h = (layer ? 50 : 80) + r() * (layer ? 40 : 70), w = 26 + r() * 24;
+    g.beginPath(); g.moveTo(x, c.height - h); g.lineTo(x + w / 2, c.height); g.lineTo(x - w / 2, c.height); g.fill();
+    if (r() < 0.5) { g.beginPath(); g.arc(x, c.height - h * 0.6, w * 0.6, 0, 7); g.fill(); }
+  }
+  g.fillRect(0, c.height - 20, c.width, 20);
+  return c;
+});
+const stars = Array.from({ length: 140 }, (_, i) => { const r = mulberry32(900 + i); return { a: r() * Math.PI * 2, y: r() * 0.9, s: r() < 0.15 ? 2 : 1 }; });
+
+// --- Cámara ---
+function project(x, y) {
+  const dx = x - player.x, dy = y - player.y, cs = Math.cos(player.ang), sn = Math.sin(player.ang);
+  return { z: dx * cs + dy * sn, xr: -dx * sn + dy * cs };
+}
+const fogLevel = z => z < FOG_STEPS[0] ? 0 : z < FOG_STEPS[1] ? 1 : z < FOG_STEPS[2] ? 2 : 3;
+
+// Colores del cielo según la hora (de noche: azul, no negro)
+function skyColors() {
+  const h = hour(), n = darkness() / 0.86;
+  const dayTop = [110, 170, 225], dayBot = [200, 225, 235];
+  const nightTop = [28, 45, 105], nightBot = [70, 95, 160];
+  const duskBot = [235, 150, 95];
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  let top = mix(dayTop, nightTop, n), bot = mix(dayBot, nightBot, n);
+  const dusk = (h >= 17 && h < 20) || (h >= 4.5 && h < 7) ? 1 - Math.min(1, Math.abs(h < 12 ? h - 5.8 : h - 18.6) / 1.4) : 0;
+  if (dusk > 0) bot = mix(bot, duskBot, dusk * 0.8);
+  if (rain) { top = mix(top, [120, 125, 135], 0.5); bot = mix(bot, [150, 155, 160], 0.5); }
+  return { top: `rgb(${top})`, bot: `rgb(${bot})`, n };
+}
+
+// Mancha en el suelo (lagos, claros, campamento): círculo del mundo proyectado en perspectiva
+function groundCircle(cx, cy, r, color) {
+  if (Math.hypot(cx - player.x, cy - player.y) - r > FAR) return;
+  const NEAR = 4, pts = [];
+  for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; pts.push(project(cx + Math.cos(a) * r, cy + Math.sin(a) * r)); }
+  const clipped = [];
+  for (let i = 0; i < pts.length; i++) { // recortar lo que queda detrás de la cámara
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    if (p.z >= NEAR) clipped.push(p);
+    if ((p.z >= NEAR) !== (q.z >= NEAR)) { const t = (NEAR - p.z) / (q.z - p.z); clipped.push({ z: NEAR, xr: p.xr + (q.xr - p.xr) * t }); }
+  }
+  if (clipped.length < 3) return;
+  ctx.fillStyle = color; ctx.beginPath();
+  for (const p of clipped) ctx.lineTo(W / 2 + p.xr / p.z * FOC, HOR + EYE / p.z * FOC);
+  ctx.fill();
+}
+
+function drawWorld() {
+  // Mirar arriba/abajo: el horizonte sube o baja en la pantalla
+  HOR = Math.round(H * 0.47 + (player.pitch || 0) * H * 0.9);
+  FOC = (W / 2) / Math.tan(FOV / 2);
+  const sky = skyColors();
+
+  // Cielo
+  let g = ctx.createLinearGradient(0, 0, 0, HOR);
+  g.addColorStop(0, sky.top); g.addColorStop(1, sky.bot);
+  ctx.fillStyle = g; if (HOR > 0) ctx.fillRect(0, 0, W, HOR + 2);
+  if (sky.n > 0.3) {
+    ctx.fillStyle = `rgba(255,255,240,${(sky.n - 0.3) * (rain ? 0.3 : 1)})`;
+    for (const s of stars) {
+      let a = s.a - player.ang; a = Math.atan2(Math.sin(a), Math.cos(a));
+      if (Math.abs(a) > FOV / 2) continue;
+      ctx.fillRect(W / 2 + a / (FOV / 2) * W / 2, HOR - H * 0.47 + s.y * H * 0.4, s.s, s.s);
     }
   }
-  // Lagos
-  for (const l of lakes) {
-    if (!onScreen(l.x, l.y, l.r + 20)) continue;
-    ctx.fillStyle = '#8f8259';
-    ctx.beginPath(); ctx.arc(l.x, l.y, l.r + 12, 0, 7); ctx.fill();
-    ctx.fillStyle = '#2f6f9a';
-    ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, 7); ctx.fill();
-    ctx.fillStyle = '#3f86b3';
-    ctx.beginPath(); ctx.arc(l.x - l.r * 0.15, l.y - l.r * 0.15, l.r * 0.7, 0, 7); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
-    const w = performance.now() / 900;
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath(); ctx.arc(l.x + Math.cos(i * 2.1) * l.r * 0.4, l.y + Math.sin(i * 2.1) * l.r * 0.4, 10 + (w + i) % 1 * 16, 0.3, 2.6); ctx.stroke();
+  // Bosque lejano: la capa de atrás primero
+  const full = W * (Math.PI * 2 / FOV); // ancho en pantalla de una vuelta completa
+  [ridge[1], ridge[0]].forEach((c, i) => {
+    const sh = H * (i ? 0.17 : 0.13), sw = c.width * (sh / c.height);
+    const off = (((player.ang / (Math.PI * 2)) * full * (i ? 1 : 0.85)) % sw + sw) % sw;
+    for (let x = -off; x < W; x += sw) ctx.drawImage(c, x, HOR - sh + 3, sw, sh);
+  });
+
+  // Suelo: oscuro a lo lejos, claro cerca
+  g = ctx.createLinearGradient(0, HOR, 0, H);
+  g.addColorStop(0, '#1f3326'); g.addColorStop(0.18, '#34532f'); g.addColorStop(1, '#5d8c40');
+  ctx.fillStyle = g; if (HOR < H) ctx.fillRect(0, HOR, W, H - HOR);
+
+  // Manchas del suelo
+  for (const l of landmarks) {
+    if (l.kind === 'pinar') groundCircle(l.x, l.y, l.r, 'rgba(25,50,30,0.35)');
+    if (l.kind === 'claro') groundCircle(l.x, l.y, l.r, 'rgba(150,190,100,0.35)');
+  }
+  groundCircle(CAMP.x, CAMP.y, 230, 'rgba(140,120,80,0.75)');
+  for (const l of lakes) { groundCircle(l.x, l.y, l.r + 14, 'rgba(140,128,90,0.9)'); groundCircle(l.x, l.y, l.r, '#3a7aa6'); }
+
+  // Juntar todo lo que se ve y dibujarlo de lo más lejano a lo más cercano
+  const list = [];
+  const add = (o, spr, w, h, extra) => {
+    const p = project(o.x, o.y);
+    if (p.z < 10 || p.z > FAR) return;
+    const sx = W / 2 + p.xr / p.z * FOC, sc = FOC / p.z;
+    if (sx + w * sc < -50 || sx - w * sc > W + 50) return;
+    list.push({ z: p.z, sx, sc, spr, w, h, extra });
+  };
+  for (const t of trees) {
+    if (t.canopy > 100) add(t, SPR.giant, 330, 520);
+    else if (t.pine) add(t, SPR.pine[Math.floor(t.shade * 2.99)], t.canopy * 1.9, t.canopy * 4.6);
+    else add(t, SPR.oak[Math.floor(t.shade * 2.99)], t.canopy * 2.3, t.canopy * 3.6);
+  }
+  for (const k of rocks) add(k, SPR.rock[k.seed < 0.5 ? 0 : 1], k.r * 2.6, k.r * 1.7);
+  for (const b of bushes) add(b, SPR.bush[b.berries], 62, 44);
+  for (const t of tents) add(t, SPR.tent[tents.indexOf(t)], 96, 66);
+  for (const f of flags) add(f, SPR.flag[f.done ? 1 : 0][f.n - 1], 46, 120);
+  for (const s of sticks) add(s, SPR.stick, 30, 9);
+  for (const d of decos) {
+    const dd = Math.abs(d.x - player.x) + Math.abs(d.y - player.y);
+    if (dd < 700) add(d, SPR.tuft[d.k === 2 ? 2 : d.k % 2], 16, 14);
+  }
+  add(CAMP, 'fire', 60, 40);
+  list.sort((a, b) => b.z - a.z);
+
+  for (const it of list) {
+    const w = it.w * it.sc, h = it.h * it.sc, bottom = HOR + EYE * it.sc;
+    // se desvanece al final de la vista, y lo que está pegado a ti se vuelve transparente para no tapar todo
+    ctx.globalAlpha = it.z > FAR - 300 ? (FAR - it.z) / 300 : it.z < 90 ? Math.max(0.3, (it.z - 15) / 75) : 1;
+    if (it.spr === 'fire') drawCampfire(it.sx, bottom, it.sc, fogLevel(it.z));
+    else {
+      const img = it.spr.levels[fogLevel(it.z)], kx = w / it.spr.w, ky = h / it.spr.h;
+      ctx.drawImage(img, it.sx - w / 2 - PAD * kx, bottom - h - PAD * ky, w + PAD * 2 * kx, h + PAD * 2 * ky);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Noche: todo se pone azul (sin oscurecer); la fogata brilla naranja
+  if (sky.n > 0) {
+    ctx.fillStyle = `rgba(35,65,170,${0.32 * sky.n})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  const fp = project(CAMP.x, CAMP.y);
+  if (fire.fuel > 0 && fp.z > 10 && fp.z < FAR) {
+    const sc = FOC / fp.z, x = W / 2 + fp.xr / fp.z * FOC, y = HOR + EYE * sc - 20 * sc;
+    const r = Math.min(W, (160 + fire.fuel) * sc * (1 + Math.sin(performance.now() / 90) * 0.04));
+    const gl = ctx.createRadialGradient(x, y, 0, x, y, r);
+    gl.addColorStop(0, `rgba(255,160,60,${0.25 + 0.35 * sky.n})`); gl.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = gl; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (rain) { ctx.fillStyle = 'rgba(90,100,115,0.18)'; ctx.fillRect(0, 0, W, H); drawRain(); }
+}
+
+// Fogata de frente: piedras, leños y llamas que se mueven
+function drawCampfire(x, bottom, sc, L) {
+  ctx.save(); ctx.translate(x, bottom); ctx.scale(sc, sc);
+  const stone = [['#7d7f7a', '#6a6c67'], ['#686a66', '#585a56'], ['#545753', '#474a46'], ['#444843', '#393d39']][L];
+  for (let i = -3; i <= 3; i++) { ctx.fillStyle = stone[i & 1]; ctx.beginPath(); ctx.ellipse(i * 9, -4, 7, 6, 0, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = ['#5a3a20', '#4d331e', '#402c1c', '#352619'][L]; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-18, -6); ctx.lineTo(14, -16); ctx.moveTo(18, -6); ctx.lineTo(-14, -16); ctx.stroke();
+  if (fire.fuel > 0) {
+    const t = performance.now() / 110, s = 0.55 + fire.fuel / 160;
+    for (const [col, hgt, wd] of [['#d9401e', 46, 20], ['#f28a1d', 34, 14], ['#ffd34d', 20, 8]]) {
+      ctx.fillStyle = col; ctx.beginPath();
+      ctx.moveTo(-wd, -10);
+      ctx.quadraticCurveTo(-wd * 0.6 + Math.sin(t) * 3, -10 - hgt * s * 0.6, Math.sin(t * 1.7) * 5, -10 - hgt * s * (1 + Math.sin(t * 2.3) * 0.1));
+      ctx.quadraticCurveTo(wd * 0.6 + Math.cos(t) * 3, -10 - hgt * s * 0.6, wd, -10);
+      ctx.fill();
     }
   }
   ctx.restore();
@@ -427,156 +746,9 @@ function drawStick(s) {
   ctx.restore();
 }
 
-function drawRock(k) {
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath(); ctx.ellipse(k.x + 4, k.y + 5, k.r, k.r * 0.85, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = '#7d7f7a';
-  ctx.beginPath();
-  for (let i = 0; i < 7; i++) {
-    const a = i / 7 * 6.283, rr = k.r * (0.85 + ((k.seed * 97 * (i + 1)) % 1) * 0.25);
-    ctx.lineTo(k.x + Math.cos(a) * rr, k.y + Math.sin(a) * rr);
-  }
-  ctx.fill();
-  ctx.fillStyle = '#a3a59e';
-  ctx.beginPath(); ctx.arc(k.x - k.r * 0.25, k.y - k.r * 0.25, k.r * 0.45, 0, 7); ctx.fill();
-}
-
-function drawBush(b) {
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath(); ctx.arc(b.x + 4, b.y + 5, b.r, 0, 7); ctx.fill();
-  ctx.fillStyle = '#2f6b2a';
-  for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(b.x + Math.cos(i * 1.26) * 10, b.y + Math.sin(i * 1.26) * 10, 13, 0, 7); ctx.fill(); }
-  ctx.fillStyle = '#3f8a35';
-  ctx.beginPath(); ctx.arc(b.x - 3, b.y - 3, 12, 0, 7); ctx.fill();
-  ctx.fillStyle = '#c4243a';
-  for (let i = 0; i < b.berries * 3; i++) {
-    const a = i * 2.4; ctx.beginPath(); ctx.arc(b.x + Math.cos(a) * (6 + i % 3 * 5), b.y + Math.sin(a) * (6 + i % 3 * 5), 3, 0, 7); ctx.fill();
-  }
-}
-
-function drawTent(t) {
-  ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.ang + Math.PI / 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(-28, -34, 62, 74);
-  ctx.fillStyle = t.color; ctx.fillRect(-30, -38, 60, 72);
-  ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(0, -38, 30, 72); // lado en sombra
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(0, -38); ctx.lineTo(0, 34); ctx.stroke(); // cumbrera
-  ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.moveTo(-10, 34); ctx.lineTo(10, 34); ctx.lineTo(0, 22); ctx.fill(); // entrada
-  ctx.restore();
-}
-
-function drawFire() {
-  const { x, y } = CAMP;
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(x, y, 30, 0, 7); ctx.fill();
-  for (let i = 0; i < 10; i++) { // piedras
-    const a = i / 10 * 6.283;
-    ctx.fillStyle = i % 2 ? '#8a8c86' : '#6f716b';
-    ctx.beginPath(); ctx.arc(x + Math.cos(a) * 24, y + Math.sin(a) * 24, 6, 0, 7); ctx.fill();
-  }
-  ctx.fillStyle = '#2b2118'; ctx.beginPath(); ctx.arc(x, y, 18, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#5a3a20'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-  for (let i = 0; i < 3; i++) { const a = i * 2.1 + 0.4; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 15, y + Math.sin(a) * 15); ctx.lineTo(x - Math.cos(a) * 8, y - Math.sin(a) * 8); ctx.stroke(); }
-  if (fire.fuel > 0) {
-    const t = performance.now() / 120, s = 0.5 + fire.fuel / 200;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, 70 * s);
-    g.addColorStop(0, 'rgba(255,170,60,0.45)'); g.addColorStop(1, 'rgba(255,120,30,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 70 * s, 0, 7); ctx.fill();
-    const layers = [['#d9401e', 14], ['#f28a1d', 10], ['#ffd34d', 6]];
-    for (const [c, r] of layers) {
-      ctx.fillStyle = c;
-      ctx.beginPath(); ctx.arc(x + Math.sin(t + r) * 2, y + Math.cos(t * 1.3 + r) * 2, r * s * (1 + Math.sin(t * 2 + r) * 0.12), 0, 7); ctx.fill();
-    }
-  }
-}
-
-function drawFlag(f) {
-  ctx.fillStyle = f.done ? 'rgba(120,200,110,0.35)' : 'rgba(255,240,180,0.25)';
-  ctx.beginPath(); ctx.arc(f.x, f.y, 40, 0, 7); ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(f.x + 3, f.y + 4, 6, 0, 7); ctx.fill();
-  const wave = Math.sin(performance.now() / 200 + f.n) * 4;
-  ctx.fillStyle = f.done ? '#3fae4a' : '#e0402c';
-  ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + 34, f.y - 8 + wave); ctx.lineTo(f.x + 4, f.y - 20); ctx.fill();
-  ctx.fillStyle = '#6b4a2b'; ctx.beginPath(); ctx.arc(f.x, f.y, 5, 0, 7); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(f.n, f.x + 16, f.y - 6 + wave / 2);
-}
-
-// El scout visto desde arriba: sombrero de ala ancha, hombros, mochila y pañoleta
-function drawPlayer() {
-  const p = player;
-  ctx.save(); ctx.translate(p.x, p.y);
-  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(4, 6, 20, 18, 0, 0, 7); ctx.fill();
-  ctx.rotate(p.ang); // 0 = mirando a la derecha
-  const sw = p.moving ? Math.sin(p.step) * 6 : 0;
-  // brazos/manos
-  ctx.fillStyle = '#e0b48a';
-  ctx.beginPath(); ctx.arc(sw, -17, 4.5, 0, 7); ctx.fill();
-  ctx.beginPath(); ctx.arc(-sw, 17, 4.5, 0, 7); ctx.fill();
-  // mochila
-  ctx.fillStyle = '#3d5a2a'; roundRect(-19, -10, 11, 20, 4); ctx.fill();
-  ctx.fillStyle = '#2c4220'; ctx.fillRect(-19, -2, 11, 3);
-  // hombros (camisa)
-  ctx.fillStyle = '#b89a5c'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 16, 0, 0, 7); ctx.fill();
-  // pañoleta (triángulo hacia la espalda)
-  ctx.fillStyle = '#c4243a'; ctx.beginPath(); ctx.moveTo(-1, -7); ctx.lineTo(-1, 7); ctx.lineTo(-11, 0); ctx.fill();
-  // sombrero
-  ctx.fillStyle = '#c8a26a'; ctx.beginPath(); ctx.arc(1, 0, 13, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#8e6f40'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = '#5a3a20'; ctx.beginPath(); ctx.arc(1, 0, 8, 0, 7); ctx.fill(); // cinta
-  ctx.fillStyle = '#b48f58'; ctx.beginPath(); ctx.arc(1, 0, 6.5, 0, 7); ctx.fill(); // copa
-  ctx.strokeStyle = '#8e6f40'; ctx.lineWidth = 1.2; // pliegues de la copa
-  ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(6, 0); ctx.moveTo(1, -5); ctx.lineTo(1, 5); ctx.stroke();
-  ctx.restore();
-}
-
 function roundRect(x, y, w, h, r) {
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-}
-
-function drawTreeTop(t) {
-  const under = Math.hypot(player.x - t.x, player.y - t.y) < t.canopy;
-  ctx.globalAlpha = under ? 0.4 : 1;
-  const c = t.canopy, sh = t.shade;
-  ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.arc(t.x + 10, t.y + 12, c, 0, 7); ctx.fill();
-  if (t.pine) {
-    const layers = [[1, `hsl(140,35%,${18 + sh * 5}%)`], [0.72, `hsl(140,35%,${24 + sh * 5}%)`], [0.45, `hsl(138,35%,${31 + sh * 5}%)`]];
-    for (const [k, col] of layers) {
-      ctx.fillStyle = col; ctx.beginPath();
-      const n = 9, r = c * k;
-      for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * 6.283 + sh * 3; const rr = i % 2 ? r * 0.72 : r; ctx.lineTo(t.x + Math.cos(a) * rr, t.y + Math.sin(a) * rr); }
-      ctx.fill();
-    }
-  } else {
-    ctx.fillStyle = `hsl(${95 + sh * 20},40%,${24 + sh * 6}%)`;
-    for (let i = 0; i < 6; i++) { const a = i * 1.047 + sh * 5; ctx.beginPath(); ctx.arc(t.x + Math.cos(a) * c * 0.45, t.y + Math.sin(a) * c * 0.45, c * 0.58, 0, 7); ctx.fill(); }
-    ctx.fillStyle = `hsl(${95 + sh * 20},42%,${32 + sh * 6}%)`;
-    ctx.beginPath(); ctx.arc(t.x - c * 0.18, t.y - c * 0.18, c * 0.55, 0, 7); ctx.fill();
-    ctx.fillStyle = `hsl(${90 + sh * 20},45%,${40 + sh * 6}%)`;
-    ctx.beginPath(); ctx.arc(t.x - c * 0.3, t.y - c * 0.3, c * 0.25, 0, 7); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-
-const darkCv = document.createElement('canvas');
-const dctx = darkCv.getContext('2d');
-function drawNight() {
-  const d = darkness() + (rain ? 0.12 : 0);
-  if (d <= 0.01) return;
-  if (darkCv.width !== W || darkCv.height !== H) { darkCv.width = W; darkCv.height = H; }
-  dctx.globalCompositeOperation = 'source-over';
-  dctx.clearRect(0, 0, W, H);
-  dctx.fillStyle = `rgba(8,12,35,${Math.min(0.92, d)})`;
-  dctx.fillRect(0, 0, W, H);
-  dctx.globalCompositeOperation = 'destination-out';
-  const hole = (x, y, r) => {
-    const g = dctx.createRadialGradient(x, y, r * 0.2, x, y, r);
-    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-    dctx.fillStyle = g; dctx.beginPath(); dctx.arc(x, y, r, 0, 7); dctx.fill();
-  };
-  hole((player.x - cam.x) * ZOOM, (player.y - cam.y) * ZOOM, 150 * ZOOM);
-  if (fire.fuel > 0) hole((CAMP.x - cam.x) * ZOOM, (CAMP.y - cam.y) * ZOOM, (120 + fire.fuel * 2.2 + Math.sin(performance.now() / 90) * 6) * ZOOM);
-  ctx.drawImage(darkCv, 0, 0);
 }
 
 function bar(x, y, w, label, v, col) {
@@ -599,16 +771,24 @@ function drawHUD() {
   ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif';
   ctx.fillText(`Leña: ${wood}/8`, 52, 119);
   ctx.fillText(`Bayas: ${food}/10`, 156, 119);
+  // insignia de la categoría
+  ctx.font = 'bold 13px sans-serif';
+  const badge = `${cat.name} · ${cat.diff}`, bw = ctx.measureText(badge).width + 34;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; roundRect(12, 140, bw, 24, 12); ctx.fill();
+  ctx.fillStyle = cat.color; ctx.beginPath(); ctx.arc(26, 152, 6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillText(badge, 38, 157);
 
-  // Brújula (el norte siempre arriba; la aguja roja apunta al objetivo)
+  // Brújula: arriba es hacia donde miras, así que las letras giran contigo; la aguja roja apunta al objetivo
   const cx = W - 84, cy = 84, R = 62, tg = target();
+  const view = a => a - player.ang - Math.PI / 2; // dirección del mundo -> ángulo en la brújula
   ctx.fillStyle = '#d8cfb4'; ctx.beginPath(); ctx.arc(cx, cy, R + 6, 0, 7); ctx.fill();
   ctx.fillStyle = '#f4efe0'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
   ctx.strokeStyle = '#8e7a4a'; ctx.lineWidth = 2; ctx.stroke();
   ctx.fillStyle = '#333'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  [['N', 0, -1], ['S', 0, 1], ['E', 1, 0], ['O', -1, 0]].forEach(([l, dx, dy]) => { ctx.fillStyle = l === 'N' ? '#c0392b' : '#333'; ctx.fillText(l, cx + dx * (R - 13), cy + dy * (R - 13)); });
-  for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283; ctx.strokeStyle = '#8e7a4a'; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)); ctx.lineTo(cx + Math.cos(a) * (R - (i % 4 ? 7 : 1)), cy + Math.sin(a) * (R - (i % 4 ? 7 : 1))); ctx.stroke(); }
-  const a = Math.atan2(tg.y - player.y, tg.x - player.x);
+  [['N', -Math.PI / 2], ['S', Math.PI / 2], ['E', 0], ['O', Math.PI]].forEach(([l, wa]) => { const a = view(wa); ctx.fillStyle = l === 'N' ? '#c0392b' : '#333'; ctx.fillText(l, cx + Math.cos(a) * (R - 13), cy + Math.sin(a) * (R - 13)); });
+  for (let i = 0; i < 16; i++) { const a = view(i / 16 * 6.283); ctx.strokeStyle = '#8e7a4a'; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)); ctx.lineTo(cx + Math.cos(a) * (R - (i % 4 ? 7 : 1)), cy + Math.sin(a) * (R - (i % 4 ? 7 : 1))); ctx.stroke(); }
+  ctx.fillStyle = '#8e7a4a'; ctx.beginPath(); ctx.moveTo(cx, cy - R - 9); ctx.lineTo(cx - 6, cy - R - 1); ctx.lineTo(cx + 6, cy - R - 1); ctx.fill(); // marca de "al frente"
+  const a = view(Math.atan2(tg.y - player.y, tg.x - player.x));
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(a);
   ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(R - 20, 0); ctx.lineTo(0, -6); ctx.lineTo(0, 6); ctx.fill();
   ctx.fillStyle = '#555'; ctx.beginPath(); ctx.moveTo(-(R - 26), 0); ctx.lineTo(0, -6); ctx.lineTo(0, 6); ctx.fill();
@@ -630,7 +810,7 @@ function drawHUD() {
   const n = nearInteract();
   if (n) {
     ctx.font = 'bold 15px sans-serif';
-    const w = ctx.measureText(n.label).width + 20, x = (player.x - cam.x) * ZOOM, y = (player.y - cam.y) * ZOOM - 50;
+    const w = ctx.measureText(n.label).width + 20, x = W / 2, y = H * 0.68;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(x - w / 2, y - 18, w, 26, 8); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText(n.label, x, y);
   }
@@ -645,7 +825,11 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   });
   ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'left';
-  ctx.fillText('WASD/flechas: caminar · Shift: correr · E: usar · F: comer · M: mapa · P: pausa', 14, H - 12);
+  ctx.fillText(`${bindKey('adelante')}/${bindKey('atras')}: caminar · ${bindKey('izquierda')}/${bindKey('derecha')}: girar · mouse: mirar · ${bindKey('usar')}: usar · ${bindKey('comer')}: comer · ${bindKey('mapa')}: mapa · Esc: menú`, 14, H - 12);
+  if (!mouseLocked() && !mapOpen && state === 'play') {
+    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText('Haz clic para mirar con el mouse', W / 2, 30);
+  }
   drawMinimap();
 }
 
@@ -655,7 +839,7 @@ const miniRect = () => ({ x: W - MAP - 18, y: H - MAP - 18 });
 function drawMinimap() {
   const { x: x0, y: y0 } = miniRect();
   ctx.fillStyle = '#d8cfb4'; roundRect(x0 - 6, y0 - 6, MAP + 12, MAP + 12, 10); ctx.fill();
-  drawMapAt(x0, y0, MAP, false);
+  ctx.drawImage(miniCv, x0, y0);
   ctx.fillStyle = '#333'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
   ctx.fillText('N', x0 + 5, y0 + 13);
   ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(x0 + MAP / 2 - 52, y0 + MAP - 22, 104, 18, 6); ctx.fill();
@@ -691,42 +875,127 @@ function screen(title, lines) {
   lines.forEach((l, i) => ctx.fillText(l, W / 2, H / 2 - 10 + i * 32));
 }
 
-function drawWorld() {
-  VW = W / ZOOM; VH = H / ZOOM;
-  cam.x = player.x - VW / 2; cam.y = player.y - VH / 2;
-  ctx.save(); ctx.scale(ZOOM, ZOOM);
-  drawGround();
-  ctx.save(); ctx.translate(-cam.x, -cam.y);
-  for (const s of sticks) if (onScreen(s.x, s.y, 14)) drawStick(s);
-  for (const k of rocks) if (onScreen(k.x, k.y, k.r + 8)) drawRock(k);
-  for (const b of bushes) if (onScreen(b.x, b.y, 30)) drawBush(b);
-  for (const f of flags) if (onScreen(f.x, f.y, 50)) drawFlag(f);
-  for (const t of tents) if (onScreen(t.x, t.y, 50)) drawTent(t);
-  drawFire();
-  for (const t of trees) if (onScreen(t.x, t.y, 20)) { ctx.fillStyle = '#4a3220'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, 7); ctx.fill(); }
-  drawPlayer();
-  for (const t of trees) if (onScreen(t.x, t.y, t.canopy + 14)) drawTreeTop(t);
+// Camisa de uniforme vista de frente (para las tarjetas de categoría)
+function drawUniform(x, y, k, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  ctx.fillStyle = color;
+  ctx.beginPath(); // cuerpo y mangas
+  ctx.moveTo(-22, -30); ctx.lineTo(-44, -18); ctx.lineTo(-36, 2); ctx.lineTo(-26, -4); ctx.lineTo(-26, 34);
+  ctx.lineTo(26, 34); ctx.lineTo(26, -4); ctx.lineTo(36, 2); ctx.lineTo(44, -18); ctx.lineTo(22, -30); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(-2, -26, 4, 60); // botones / abertura
+  ctx.fillRect(-20, -8, 12, 9); ctx.fillRect(8, -8, 12, 9); // bolsillos
+  ctx.fillStyle = '#f2ead6'; // pañoleta
+  ctx.beginPath(); ctx.moveTo(-22, -30); ctx.lineTo(22, -30); ctx.lineTo(0, 4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8e6f40'; ctx.beginPath(); ctx.arc(0, -16, 4, 0, 7); ctx.fill(); // anillo
   ctx.restore();
+}
+
+// Pantalla de inicio: elegir la categoría (dificultad)
+function drawTitle() {
+  ctx.fillStyle = 'rgba(10,20,10,0.72)'; ctx.fillRect(0, 0, W, H);
+  const s = Math.min(1, W / 920, H / 620);
+  menuHits = [];
+  const hit = (x, y, w, h, fn) => menuHits.push({ x: W / 2 + x * s, y: H / 2 + y * s, w: w * s, h: h * s, fn });
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(s, s);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 46px sans-serif'; ctx.fillText('Campamento Scout', 0, -235);
+  ctx.fillStyle = '#fff'; ctx.font = '18px sans-serif';
+  ctx.fillText('Explora el bosque, encuentra las 5 banderas y mantén viva la fogata.', 0, -198);
+  ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 20px sans-serif'; ctx.fillText('Elige tu categoría', 0, -150);
+  CATEGORIES.forEach((c, i) => {
+    const x = -430 + i * 220, y = -125, w = 200, h = 270, sel = i === settings.cat;
+    ctx.fillStyle = sel ? 'rgba(255,240,200,0.18)' : 'rgba(0,0,0,0.35)'; roundRect(x, y, w, h, 14); ctx.fill();
+    ctx.strokeStyle = sel ? c.color : 'rgba(255,255,255,0.15)'; ctx.lineWidth = sel ? 4 : 2; ctx.stroke();
+    drawUniform(x + w / 2, y + 62, 1.1, c.color);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 20px sans-serif'; ctx.fillText(c.name, x + w / 2, y + 132);
+    ctx.fillStyle = c.color; ctx.font = 'bold 15px sans-serif'; ctx.fillText(c.diff, x + w / 2, y + 156);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '13px sans-serif';
+    c.desc.forEach((l, j) => ctx.fillText(l, x + w / 2, y + 188 + j * 19));
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '12px sans-serif'; ctx.fillText(i + 1, x + 14, y + 20);
+    hit(x, y, w, h, () => { if (sel) startGame(); else pickCategory(i); });
+  });
+  ctx.fillStyle = cat.color; roundRect(-110, 172, 220, 46, 12); ctx.fill();
+  ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 20px sans-serif'; ctx.fillText('Empezar', 0, 202);
+  hit(-110, 172, 220, 46, startGame);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '14px sans-serif';
+  ctx.fillText('← → o 1-4 para elegir · ENTER para empezar', 0, 245);
   ctx.restore();
-  drawNight();
-  if (rain) drawRain();
+}
+
+// Menú de Esc: continuar, sensibilidad y controles (se maneja con el mouse)
+function drawMenu() {
+  ctx.fillStyle = 'rgba(8,16,12,0.78)'; ctx.fillRect(0, 0, W, H);
+  const s = Math.min(1, H / 660, W / 700);
+  menuHits = [];
+  const hit = (x, y, w, h, fn, slider) => menuHits.push({ x: W / 2 + x * s, y: H / 2 + y * s, w: w * s, h: h * s, fn, slider });
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(s, s);
+  ctx.fillStyle = '#2a3a2c'; roundRect(-330, -310, 660, 620, 18); ctx.fill();
+  ctx.strokeStyle = '#8e7a4a'; ctx.lineWidth = 3; ctx.stroke();
+
+  const button = (x, y, w, h, text, fn, active) => {
+    ctx.fillStyle = active ? '#e0a23a' : '#4a5f45'; roundRect(x, y, w, h, 9); ctx.fill();
+    ctx.fillStyle = active ? '#222' : '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(text, x + w / 2, y + h / 2 + 6);
+    hit(x, y, w, h, fn);
+  };
+  const header = (text, y) => { ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'left'; ctx.fillText(text, -300, y); };
+  const slider = (label, y, key) => {
+    ctx.fillStyle = '#fff'; ctx.font = '15px sans-serif'; ctx.textAlign = 'left'; ctx.fillText(label, -300, y + 5);
+    const bx = -60, bw = 300;
+    ctx.fillStyle = '#1a241b'; roundRect(bx, y - 5, bw, 10, 5); ctx.fill();
+    const v = settings[key], px = bx + (v - 1) / 9 * bw;
+    ctx.fillStyle = '#e0a23a'; roundRect(bx, y - 5, px - bx, 10, 5); ctx.fill();
+    ctx.beginPath(); ctx.arc(px, y, 11, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(v, bx + bw + 22, y + 5);
+    hit(bx - 12, y - 16, bw + 24, 32, mx => {
+      settings[key] = clamp(Math.round(1 + ((mx - (W / 2 + bx * s)) / (bw * s)) * 9), 1, 10);
+      saveSettings();
+    }, true);
+  };
+
+  ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('Menú', 0, -265);
+  button(-110, -245, 220, 40, 'Continuar', () => { closeMenu(); lockMouse(); });
+
+  header('Sensibilidad', -170);
+  slider('Mouse', -138, 'sens');
+  slider('Girar con teclado', -100, 'giro');
+  ctx.fillStyle = '#fff'; ctx.font = '15px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Invertir arriba/abajo', -300, -57);
+  button(-60, -78, 90, 30, settings.invert ? 'Sí' : 'No', () => { settings.invert = !settings.invert; saveSettings(); }, settings.invert);
+
+  header('Controles', -10);
+  ctx.font = '13px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.textAlign = 'right';
+  ctx.fillText('Haz clic en una tecla y luego pulsa la nueva', 300, -10);
+  Object.keys(DEFAULT_BINDS).forEach((a, i) => {
+    const col = i < 5 ? -300 : 10, y = 8 + (i % 5) * 38;
+    ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(BIND_NAMES[a], col, y + 20);
+    const waiting = waitingBind === a;
+    button(col + 180, y, 100, 30, waiting ? '...' : bindKey(a), () => { waitingBind = a; }, waiting);
+  });
+  button(-120, 205, 240, 36, 'Restablecer controles', () => { settings.binds = { ...DEFAULT_BINDS }; saveSettings(); });
+
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(waitingBind ? 'Pulsa la tecla nueva (Esc para cancelar)' : 'Esc: volver al juego', 0, 280);
+  ctx.restore();
 }
 
 function draw() {
   if (state === 'title') {
-    if (!player) { genWorld(20261101); player = { x: CAMP.x, y: CAMP.y + 90, ang: -1.57, step: 0 }; fire = { fuel: 70 }; time = 0.1; rain = false; drops = []; }
-    player.x = CAMP.x + Math.cos(performance.now() / 9000) * 300; player.y = CAMP.y + Math.sin(performance.now() / 9000) * 300;
+    if (!player) { genWorld(20261101); player = { x: CAMP.x, y: CAMP.y + 90, ang: -1.57, pitch: 0, step: 0 }; fire = { fuel: 70 }; time = 0.1; rain = false; drops = []; }
+    const t = performance.now() / 9000; // en el título la cámara da vueltas alrededor de la fogata, mirándola
+    player.x = CAMP.x + Math.cos(t) * 190; player.y = CAMP.y + Math.sin(t) * 190; player.ang = t + Math.PI; player.pitch = 0;
     drawWorld();
-    screen('Campamento Scout', ['Explora el bosque, encuentra las 5 banderas', 'y mantén viva la fogata del campamento.', '', 'Pulsa ENTER para empezar']);
+    drawTitle();
     return;
   }
   drawWorld();
   drawHUD();
   if (mapOpen && state === 'play') drawBigMap();
   const mins = Math.floor(playTime / 60), secs = Math.floor(playTime % 60);
-  if (state === 'pause') screen('Pausa', ['Pulsa P para seguir']);
-  if (state === 'win') screen('¡Insignia de Explorador!', [`Encontraste las ${NUM_FLAGS} banderas y volviste al campamento.`, `Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', 'Pulsa ENTER para jugar otra vez']);
-  if (state === 'lose') screen('Te quedaste sin energía', ['Come bayas con [F] y quédate cerca de la fogata en la noche.', '', 'Pulsa ENTER para intentarlo otra vez']);
+  if (state === 'menu') drawMenu();
+  if (state === 'win') screen('¡Insignia de Explorador!', [`Encontraste las ${NUM_FLAGS} banderas y volviste al campamento.`, `${cat.name} (${cat.diff}) · Días: ${day} · Tiempo: ${mins}:${String(secs).padStart(2, '0')}`, '', 'ENTER: jugar otra vez · Esc: elegir otra categoría']);
+  if (state === 'lose') screen('Te quedaste sin energía', ['Come bayas con [' + bindKey('comer') + '] y quédate cerca de la fogata en la noche.', '', 'ENTER: intentarlo otra vez · Esc: elegir otra categoría']);
 }
 
 let last = performance.now();
