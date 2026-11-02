@@ -842,11 +842,37 @@ function drawMinimap() {
   const { x: x0, y: y0 } = miniRect();
   ctx.fillStyle = '#d8cfb4'; roundRect(x0 - 6, y0 - 6, MAP + 12, MAP + 12, 10); ctx.fill();
   ctx.drawImage(miniCv, x0, y0);
-  ctx.fillStyle = '#333'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('N', x0 + 5, y0 + 13);
+  windRose(x0 + 20, y0 + 20, 15, false);
+  ctx.font = 'bold 11px sans-serif';
   ctx.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(x0 + MAP / 2 - 52, y0 + MAP - 22, 104, 18, 6); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
   ctx.fillText('[M] agrandar', x0 + MAP / 2, y0 + MAP - 9);
+}
+
+// Rosa de los vientos (el norte del mapa siempre está arriba). Con letras solo si es grande.
+function windRose(cx, cy, r, letters) {
+  ctx.save(); ctx.translate(cx, cy);
+  ctx.fillStyle = 'rgba(244,239,224,0.85)'; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#8e7a4a'; ctx.lineWidth = Math.max(1, r / 30); ctx.stroke();
+  // puntas: primero las 4 diagonales cortas, luego las 4 principales encima
+  const point = (ang, len, w, light, dark) => {
+    ctx.save(); ctx.rotate(ang);
+    ctx.fillStyle = light; ctx.beginPath(); ctx.moveTo(0, -len); ctx.lineTo(-w, 0); ctx.lineTo(0, 0); ctx.fill();
+    ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(0, -len); ctx.lineTo(w, 0); ctx.lineTo(0, 0); ctx.fill();
+    ctx.restore();
+  };
+  for (let i = 0; i < 4; i++) point(Math.PI / 4 + i * Math.PI / 2, r * 0.62, r * 0.14, '#cdbf98', '#8e7a4a');
+  for (let i = 0; i < 4; i++) point(i * Math.PI / 2, r, r * 0.2, i === 0 ? '#e0584a' : '#efe6cc', i === 0 ? '#a52a1e' : '#5a4a2a');
+  ctx.fillStyle = '#5a4a2a'; ctx.beginPath(); ctx.arc(0, 0, Math.max(1.5, r * 0.07), 0, 7); ctx.fill();
+  if (letters) {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `bold ${Math.round(r * 0.36)}px sans-serif`;
+    const d = r + r * 0.28;
+    [['N', 0, -d], ['S', 0, d], ['E', d, 0], ['O', -d, 0]].forEach(([l, x, y]) => {
+      ctx.fillStyle = l === 'N' ? '#c0392b' : '#333'; ctx.fillText(l, x, y);
+    });
+    ctx.textBaseline = 'alphabetic';
+  }
+  ctx.restore();
 }
 
 // Mapa grande con los nombres de los lugares (el juego se pausa mientras lo ves)
@@ -856,8 +882,8 @@ function drawBigMap() {
   const size = Math.min(W, H) - 110, x0 = (W - size) / 2, y0 = (H - size) / 2;
   ctx.fillStyle = '#d8cfb4'; roundRect(x0 - 10, y0 - 10, size + 20, size + 20, 14); ctx.fill();
   drawMapAt(x0, y0, size, true);
+  windRose(x0 + 62, y0 + 62, 42, true);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#c0392b'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('N ↑', x0 + 26, y0 + 26);
   ctx.fillStyle = '#ffe9b0'; ctx.font = 'bold 20px sans-serif'; ctx.fillText('Mapa del bosque', W / 2, y0 - 20);
   ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.fillText('M o clic para cerrar', W / 2, y0 + size + 32);
 }
