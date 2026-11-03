@@ -39,7 +39,21 @@ const dirName4 = (a, b) => DIRS4[(Math.round(Math.atan2(b.y - a.y, b.x - a.x) / 
 const bearingOfAngle = ang => Math.round(((ang * 180 / Math.PI + 90) % 360 + 360) % 360) % 360;
 const bearing = (a, b) => bearingOfAngle(Math.atan2(b.y - a.y, b.x - a.x));
 const angDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
-const stepsFromCamp = () => Math.round(dist(player, CAMP) / STEP); // pasos en línea recta desde la fogata
+const stepsFrom = p => Math.round(dist(player, p) / STEP); // pasos en línea recta desde un punto
+// Rover: cada vez que ganas una pista, se mide desde un lugar distinto (nunca el campamento ni los lagos,
+// porque no puedes pararte en medio del agua)
+let lastRef = null;
+function pickRef(f) {
+  const ok = l => ['claro', 'roca', 'arbol', 'pinar'].includes(l.kind) && dist(l, f) > 400;
+  let c = landmarks.filter(l => ok(l) && l !== lastRef);
+  if (!c.length) c = landmarks.filter(ok);
+  if (!c.length) c = landmarks.filter(l => l.kind === 'camp');
+  const ref = c[Math.floor(Math.random() * c.length)];
+  lastRef = ref;
+  f.ref = ref;
+  f.route = { deg: bearing(ref, f), steps: Math.round(dist(ref, f) / STEP) };
+}
+const curRef = () => { const f = flags.find(f => !f.done && !f.mark); return f && f.unlocked ? f.ref : null; };
 const conArt = (prep, l) => (prep + ' ' + l.art + ' ' + l.name).replace('de el ', 'del ').replace('a el ', 'al ');
 
 function free(x, y, r, list, pad) {
@@ -96,9 +110,10 @@ function genWorld(seed) {
       if (d < bd) { bd = d; best = l; }
     }
     f.lm = best; // la pista se arma según la categoría (ver flagHint)
-    f.route = { deg: bearing(CAMP, f), steps: Math.round(dist(CAMP, f) / STEP) }; // ruta de Rover desde la fogata
+    f.route = null; f.ref = null; // Rover: se arma al ganar el reto (ver pickRef)
     f.mark = null; f.result = null;
   }
+  lastRef = null;
 
   // Tiendas del campamento
   for (let i = 0; i < 3; i++) {
@@ -250,7 +265,7 @@ function flagHint(f) {
   if (!l || !cat.hint) return '';
   if (cat.hint === '4') return 'al ' + dirName4(l, f) + ' ' + conArt('de', l);
   if (cat.hint === '8') return 'al ' + dirName(l, f) + ' ' + conArt('de', l);
-  if (cat.hint === 'ruta') return `${f.route.deg}° y ${f.route.steps} pasos desde la fogata`;
+  if (cat.hint === 'ruta') return f.route ? `${f.route.deg}° y ${f.route.steps} pasos ${conArt('desde', f.ref)}` : '';
   return 'a ' + bearing(l, f) + '° ' + conArt('de', l);
 }
 
@@ -595,7 +610,7 @@ function answerReto(ans) {
   const f = reto.f;
   if (retoCorrect(reto.c, ans)) {
     closeReto(); f.wait = false;
-    if (cat.hint === 'ruta') { f.unlocked = true; toast(`🔓 Pista de la Base ${f.n}: ${flagHint(f)}`, 7); }
+    if (cat.hint === 'ruta') { f.unlocked = true; pickRef(f); toast(`🔓 Pista de la Base ${f.n}: ${flagHint(f)}`, 7); }
     else {
       f.done = true;
       const left = flags.filter(g => !g.done).length;
@@ -693,8 +708,8 @@ function markFlag() {
   const f = flags.find(f => !f.done && !f.mark);
   if (!f) { toast('Ya marcaste todas. Vuelve al campamento a revisar tu libreta.'); return; }
   if (!f.unlocked) { toast(`Primero resuelve el reto de la Base ${f.n} con [${keyHint('reto')}] para saber dónde está.`, 4); return; }
-  f.mark = { deg: bearing(CAMP, player), steps: stepsFromCamp() };
-  toast(`📒 Base ${f.n} anotada: ${f.mark.deg}°, ${f.mark.steps} pasos`, 4);
+  f.mark = { deg: bearing(f.ref, player), steps: stepsFrom(f.ref) };
+  toast(`📒 Base ${f.n} anotada: ${f.mark.deg}°, ${f.mark.steps} pasos ${conArt('desde', f.ref)}`, 4);
   if (!flags.some(g => !g.done && !g.mark)) toast('¡Libreta completa! Regresa al campamento.', 4);
 }
 function updateReveal(dt) {
@@ -730,7 +745,7 @@ function drawBook() {
     ctx.textAlign = 'left'; ctx.fillStyle = '#3a2a14'; ctx.font = 'bold 16px sans-serif';
     ctx.fillText(`Base ${f.n}`, x0 + 24, y);
     ctx.font = '14px sans-serif'; ctx.fillStyle = '#6b5a3a';
-    ctx.fillText(f.unlocked || f.done ? `Pista: ${f.route.deg}° y ${f.route.steps} pasos` : 'Pista: ??? (resuelve el reto)', x0 + 24, y + 20);
+    ctx.fillText((f.unlocked || f.done) && f.route ? `Pista: ${f.route.deg}°, ${f.route.steps} pasos desde ${f.ref.name}` : 'Pista: ??? (resuelve el reto)', x0 + 24, y + 20);
     ctx.textAlign = 'right'; ctx.font = 'bold 15px sans-serif';
     let txt, col;
     if (f.done) { txt = '✓ ¡Encontrada!'; col = '#2e8b3a'; }
@@ -739,7 +754,7 @@ function drawBook() {
     else if (f.result === 'mal') { txt = '✗ Mal, búscala otra vez'; col = '#c0392b'; }
     else { txt = '— sin marcar —'; col = '#9a8a6a'; }
     if (checking && f.mark && !f.done) col = '#b07a10';
-    ctx.fillStyle = col; ctx.fillText(txt, x0 + w - 24, y + 10);
+    ctx.fillStyle = col; ctx.fillText(txt, x0 + w - 24, y); // en el renglón de "Base N" para no chocar con la pista
   });
   ctx.textAlign = 'center'; ctx.font = '13px sans-serif'; ctx.fillStyle = '#6b5a3a';
   bookErase = null;
@@ -1208,7 +1223,7 @@ function drawHUD() {
   }
   let py = !isTouch ? cy + R + 29 : H > W ? 196 : cy - R + 6;
   if (cat.hint === 'grados' || cat.hint === 'ruta') { pill('Rumbo: ' + bearingOfAngle(player.ang) + '°', py); py += 28; } // categorías que usan grados
-  if (cat.hint === 'ruta') { pill('Pasos desde la fogata: ' + stepsFromCamp(), py); py += 28; }
+  if (cat.hint === 'ruta') { const ref = curRef(); if (ref) { pill('Pasos ' + conArt('desde', ref) + ': ' + stepsFrom(ref), py); py += 28; } }
   pill('Ve a: ' + tg.name, py); py += 28;
   if (tg.hint) { pill(tg.hint, py); py += 28; }
   ctx.fillStyle = '#fff';
