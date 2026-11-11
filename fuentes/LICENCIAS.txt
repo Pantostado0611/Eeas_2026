@@ -1,0 +1,6 @@
+Letras incluidas en el juego:
+
+- OpenSans-Regular.ttf y OpenSans-Bold.ttf: Open Sans, de Steve Matteson / Google. Licencia Apache 2.0.
+- DroidSansMono.ttf: Droid Sans Mono, de Steve Matteson / Google. Licencia Apache 2.0.
+
+Se pueden incluir en juegos. Vienen de la carpeta de fuentes de GameMaker.

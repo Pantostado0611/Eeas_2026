@@ -5,14 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Scouts</title>
+<title>Scouteando en Puebla</title>
 <style>
+  /* Letras: Open Sans y Droid Sans Mono (de Steve Matteson / Google, licencia Apache 2.0) */
+  @font-face { font-family: "Open Sans"; src: url("fuentes/OpenSans-Regular.ttf"); font-weight: normal; }
+  @font-face { font-family: "Open Sans"; src: url("fuentes/OpenSans-Bold.ttf"); font-weight: bold; }
+  @font-face { font-family: "Droid Sans Mono"; src: url("fuentes/DroidSansMono.ttf"); }
   html, body { margin: 0; height: 100%; background: #1d2b1a; overflow: hidden; overscroll-behavior: none; }
   canvas { display: block; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 </style>
 </head>
 <body>
 <canvas id="juego"></canvas>
-<script>document.write('<script src="juego.js?v=' + Date.now() + '"><\/script>');</script>
+<script>
+  // siempre la versión nueva del juego (sin caché)
+  var v = Date.now();
+  ['util', 'entrada', 'tactil', 'mundo', 'sprites', 'dibujo', 'supervivencia', 'bases', 'hud', 'juego']
+    .forEach(function (n) { document.write('<script src="js/' + n + '.js?v=' + v + '"><\/script>'); });
+</script>
 </body>
 </html>
