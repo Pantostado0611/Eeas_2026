@@ -1,8 +1,8 @@
-// Supervivencia: leña, bayas, comida, fogata, energía (hambre y frío), lluvia y mensajes.
+// Supervivencia: leña, raciones, fogata, energía (hambre y frío), lluvia y mensajes. (La comida de verdad es en el comedor: comedor.js)
 // También: prender la fogata, río (chaleco, canoa y rescate) y Cerro del Coyote (sendero, cuerda y rapel).
 
 const WOOD_MAX = 8;    // leña que puedes cargar
-const FOOD_MAX = 10;   // bayas que puedes cargar
+const FOOD_MAX = RACIONES_MAX; // raciones que puedes cargar (te las dan en el comedor)
 
 // ---------- Mensajes cortos ----------
 function toast(text, t = 3) { toasts.push({ text, t }); if (toasts.length > 3) toasts.shift(); }
@@ -12,7 +12,7 @@ function toasts_actualizar(dt) {
 // "[E]" con la tecla que tenga asignada esa acción (en el celular, el nombre del botón: "[Usar]")
 function tecla_entre_corchetes(accion) {
   if (tactil) {
-    const nombres = { usar: 'Usar', comer: 'Comer', mapa: 'Mapa', libreta: 'Libreta', marcar: 'Marcar', reto: 'Reto', correr: 'Correr' };
+    const nombres = { usar: 'Usar', comer: 'Ración', mapa: 'Pasaporte', libreta: 'Libreta', marcar: 'Marcar', reto: 'Reto', correr: 'Correr' };
     if (nombres[accion]) return '[' + nombres[accion] + ']';
   }
   return '[' + nombre_tecla(settings.binds[accion]) + ']';
@@ -24,6 +24,7 @@ function cerca_de_algo() {
   const u = tecla_entre_corchetes('usar') + ' ';
   const mc = monte_cerca();
   if (mc) return mc;
+  if (adentro) return comedor_cerca();
   if (monte_modo !== '') return null;
   if (dist(player, camp) < 80) {
     if (!fire.lit) return { kind: 'fire', label: u + 'Prender la fogata' };
@@ -35,7 +36,6 @@ function cerca_de_algo() {
     if (dr < 70 && dr <= da) return { kind: 'chaleco', obj: m, label: u + (chaleco ? 'Dejar el chaleco' : 'Ponerte el chaleco salvavidas') };
     if (da < 75) return { kind: 'canoa', obj: m, label: u + 'Subirte a la canoa' };
   }
-  for (const b of bushes) if (b.berries > 0 && dist(player, b) < b.r + 30) return { kind: 'bush', obj: b, label: u + 'Recoger bayas' };
   return null;
 }
 function usar() {
@@ -45,6 +45,7 @@ function usar() {
   if (n.kind === 'canoa') { canoa_subir(n.obj); return; }
   if (n.kind === 'cuerda') { if (cuerda !== n.obj.k) { cuerda = n.obj.k; toast('Te enganchaste a la cuerda. ¡Ahora sí puedes pasar!', 3); } return; }
   if (n.kind === 'rapel') { rapel_empezar(); return; }
+  if (n.kind === 'ventanilla' || n.kind === 'mesa') { comedor_usar(n); return; }
   if (n.kind === 'fire') {
     if (!fire.lit) { abrir_prender(); return; }
     if (wood <= 0) { toast('No traes leña. Busca ramas en el bosque.'); return; }
@@ -52,18 +53,14 @@ function usar() {
     const used = Math.max(1, Math.min(wood, need));
     wood -= used; fire.fuel = Math.min(100, fire.fuel + used * 20);
     toast('Echaste ' + used + ' de leña al fuego.');
-  } else {
-    const got = Math.min(n.obj.berries, FOOD_MAX - food);
-    if (got <= 0) { toast('Ya no te caben más bayas.'); return; }
-    food += got; n.obj.berries -= got; n.obj.regrow = 0;
-    toast('+' + got + ' bayas');
   }
 }
+// Comer una ración de la mochila (te las dan en el comedor, en la ventanilla de Agua y raciones)
 function comer() {
-  if (food <= 0) { toast('No tienes comida. Busca arbustos con bayas.'); return; }
-  if (energy >= 99) { toast('No tienes hambre.'); return; }
-  food--; energy = Math.min(100, energy + 14);
-  toast('Ñam. +energía');
+  if (food <= 0) { toast('No traes raciones. Ve al comedor a la hora de comer: ahí te dan para el camino.', 4); return; }
+  if (energy >= 95) { toast('No tienes hambre. Guarda tu ración para después.'); return; }
+  food--; energy = Math.min(100, energy + ENERGIA_RACION);
+  toast('Te comiste una ración. +energía (te ' + (food === 1 ? 'queda 1' : 'quedan ' + food) + ')');
 }
 
 // ---------- Cada cuadro (solo mientras se juega) ----------
@@ -89,28 +86,28 @@ function supervivencia_actualizar(dt, running) {
       if (wood === WOOD_MAX) toast('Ya llevas toda la leña que puedes cargar (8).');
     }
   }
-  // Bayas vuelven a crecer
-  for (const b of bushes) if (b.berries < 3) { b.regrow += dt; if (b.regrow > 45) { b.berries++; b.regrow = 0; } }
 
   // Fogata: si se apaga, se acaba el juego
   if (fire.lit) {
     const antes = fire.fuel;
-    // Recién prendida (70) dura 3:30 sin lluvia y 2:45 con lluvia en Tropa; las demás categorías por fire_dur
-    fire.fuel -= dt * (rain ? 70 / 165 : 70 / 210) / cat.fire_dur;
+    // Recién prendida (70) dura 7:00 sin lluvia y 5:30 con lluvia en Tropa (el doble que en el mapa chico, ESC);
+    // las demás categorías por fire_dur
+    fire.fuel -= dt * (rain ? 70 / 165 : 70 / 210) / cat.fire_dur / ESC;
     if (antes > 25 && fire.fuel <= 25) toast('¡La fogata se está apagando! Échale leña.', 4);
     if (antes > 10 && fire.fuel <= 10) toast('¡Ya casi se apaga la fogata! Corre con leña.', 4);
     if (fire.fuel <= 0) { fire.fuel = 0; lose_reason = 'fogata'; state = 'lose'; return; }
   }
 
-  // Energía (hambre + frío)
-  const cold = es_noche() && (fire.fuel <= 0 || dist(player, camp) > 320);
-  let drain = 0.3 * cat.energy;
+  // Energía (hambre + frío). Llena te dura unas 9 horas del juego en Tropa (en tiempo real depende de la modalidad).
+  // Dentro del comedor no hace frío ni te mojas.
+  const cold = !adentro && es_noche() && (fire.fuel <= 0 || dist(player, camp) > 320);
+  let drain = 100 / 9 * cat.energy * 24 / dia_len();
   if (running && player.moving) drain *= 1.8;
   if (cold) drain *= 1.6;
-  if (rain) drain *= 1.15;
+  if (rain && !adentro) drain *= 1.15;
   energy -= dt * drain;
   if (cold && Math.random() < dt / 20) toast('Tienes frío... acércate a la fogata.');
-  if (energy <= 25 && energy + dt * drain > 25) toast('Tienes mucha hambre. Come algo con ' + tecla_entre_corchetes('comer') + '.', 4);
+  if (energy <= 25 && energy + dt * drain > 25) toast('Tienes mucha hambre. ' + (food > 0 ? 'Cómete una ración con ' + tecla_entre_corchetes('comer') + '.' : 'Ve al comedor.'), 4);
   if (energy <= 0) { energy = 0; lose_reason = 'energia'; state = 'lose'; }
 }
 // Gotas de lluvia (en coordenadas de pantalla)
@@ -135,6 +132,7 @@ function prender_listo() {
   toast('¡Prendiste la fogata! Si se apaga, se acaba el juego.', 5);
   if (cat.hint === 'ruta') toast('Resuelve el reto ' + tecla_entre_corchetes('reto') + ' para saber dónde está cada base. Luego marca con ' + tecla_entre_corchetes('marcar') + '.', 7);
   else toast('Ahora sí: llega a las 5 bases y resuelve su reto.', 6);
+  toast('El comedor está al sur del campamento. Los horarios vienen en tu pasaporte ' + tecla_entre_corchetes('mapa') + '.', 7);
 }
 function prender_elegir(metodo) {
   Object.assign(prender, { metodo, calor: 0, brasa: false, soplos: 0, intentos: 0, lado: 0, msg: '' });

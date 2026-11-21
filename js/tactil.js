@@ -11,10 +11,10 @@ const BOTONES = [
   { id: 'palanca', label: 'Palanca', ax: 0, ay: 1, dx: 96, dy: -96, r: 50 },
   { id: 'usar', label: 'Usar', ax: 1, ay: 1, dx: -64, dy: -70, r: 31 },
   { id: 'correr', label: 'Correr', ax: 1, ay: 1, dx: -64, dy: -150, r: 23 },
-  { id: 'comer', label: 'Comer', ax: 1, ay: 1, dx: -146, dy: -44, r: 23 },
+  { id: 'comer', label: 'Ración', ax: 1, ay: 1, dx: -146, dy: -44, r: 23 },
   { id: 'rover', label: 'Reto/Marcar', ax: 1, ay: 1, dx: -146, dy: -124, r: 23 },
   { id: 'menu', label: 'Menú', ax: 0, ay: 0, dx: 28, dy: 138, r: 19 },
-  { id: 'mapa', label: 'Mapa', ax: 0, ay: 0, dx: 72, dy: 138, r: 19 },
+  { id: 'mapa', label: 'Pasaporte', ax: 0, ay: 0, dx: 72, dy: 138, r: 19 },
   { id: 'libreta', label: 'Libreta', ax: 0, ay: 0, dx: 116, dy: 138, r: 19 },
 ];
 
@@ -37,7 +37,7 @@ function tactil_soltar() { dedos.clear(); palanca = null; tactil_avance = 0; tac
 // ¿Qué se puede hacer con los dedos ahorita? '' = nada (hay una ventanita: ella revisa los toques con toque_pulsado())
 function tactil_modo() {
   if (state !== 'play') return '';
-  if (reto || prender || book || mapa_abierto || reveal) return '';
+  if (reto || prender || book || mapa_abierto || reveal || comiendo) return '';
   if (rapel) return 'rapel';
   if (canoa) return canoa.manual ? '' : 'canoa';
   if (rescate) return 'rescate';

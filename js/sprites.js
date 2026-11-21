@@ -53,11 +53,6 @@ function pintar_roca(g, w, h, seed) {
   g.fill();
   elipse(g, w * 0.4 - w * 0.22, h * 0.45 - h * 0.22, w * 0.4 + w * 0.22, h * 0.45 + h * 0.22, '#9a9c95');
 }
-function pintar_arbusto(g, w, h, berries) {
-  for (const [dx, dy, r] of [[0.25, 0.65, 0.28], [0.75, 0.65, 0.28], [0.5, 0.45, 0.35], [0.5, 0.75, 0.3]]) blob(w * dx, h * dy, w * r, '#2f6b2a', g);
-  blob(w * 0.4, h * 0.38, w * 0.18, '#3f8a35', g);
-  for (let i = 0; i < berries * 4; i++) blob(w * (0.18 + ((i * 0.37) % 0.64)), h * (0.3 + ((i * 0.53) % 0.55)), w * 0.045, '#c4243a', g);
-}
 function pintar_tienda(g, w, h, col) {
   tri(g, w / 2, 0, w, h, 0, h, col);
   tri(g, w / 2, 0, w, h, w / 2, h, 'rgba(0,0,0,0.2)');
@@ -141,7 +136,6 @@ function sprites_crear() {
   sprs.pine = [0, 1, 2].map(i => sprite_pintado(110, 260, (g, w, h) => pintar_pino(g, w, h, 17 + i * 4)));
   sprs.giant = sprite_pintado(300, 460, (g, w, h) => pintar_roble(g, w, h, 100, 24));
   sprs.rock = [0.13, 0.57].map(s => sprite_pintado(110, 70, (g, w, h) => pintar_roca(g, w, h, s)));
-  sprs.bush = [0, 1, 2, 3].map(n => sprite_pintado(80, 56, (g, w, h) => pintar_arbusto(g, w, h, n)));
   sprs.tent = ['#d9813b', '#3b7bd9', '#c9b13a'].map(c => sprite_pintado(120, 80, (g, w, h) => pintar_tienda(g, w, h, c)));
   sprs.flag = [false, true].map(d => [1, 2, 3, 4, 5].map(n => sprite_pintado(60, 140, (g, w, h) => pintar_bandera(g, w, h, d, n))));
   sprs.stick = sprite_pintado(40, 12, pintar_rama);
@@ -151,6 +145,7 @@ function sprites_crear() {
   sprs.poste = sprite_pintado(16, 50, pintar_poste);
   sprs.coyote = sprite_pintado(50, 46, pintar_coyote);
   sprs.cascada = sprite_pintado(260, 230, pintar_cascada);
+  comedor_sprites();
 
   // Bosque lejano en el horizonte: dos capas que giran contigo (la de atrás más oscura y borrosa)
   ridge = [0, 1].map(layer => {

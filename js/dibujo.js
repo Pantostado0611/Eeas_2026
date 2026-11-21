@@ -105,6 +105,7 @@ function dibujar_mundo() {
   FOC = (W / 2) / Math.tan(FOV / 2);
   cam_cs = Math.cos(player.ang); cam_sn = Math.sin(player.ang);
   ojo = EYE + player.alt; // en la montaña o en rapel vas más alto
+  if (adentro) { comedor_interior_dibujar(); return; } // dentro del comedor no se ve el bosque
   const sky = colores_cielo();
 
   // Cielo
@@ -155,17 +156,18 @@ function dibujar_mundo() {
     lote_terminar(pasada === 0 ? 'rgb(144,131,92)' : '#3a7aa6');
   }
   rio_suelo_dibujar();
+  comedor_suelo_dibujar();
 
   // Juntar todo lo que se ve y dibujarlo de lo más lejano a lo más cercano
   vis = []; monte_clave = 0;
   monte_agregar(); // primero la montaña (lo que está en alto se ordena con ella)
+  comedor_agregar();
   for (const t of trees) {
     if (t.canopy > 100) agregar_visible(t.x, t.y, sprs.giant, 330, 520);
     else if (t.pine) agregar_visible(t.x, t.y, sprs.pine[Math.floor(t.shade * 2.99)], t.canopy * 1.9, t.canopy * 4.6);
     else agregar_visible(t.x, t.y, sprs.oak[Math.floor(t.shade * 2.99)], t.canopy * 2.3, t.canopy * 3.6);
   }
   for (const k of rocks) agregar_visible(k.x, k.y, sprs.rock[k.seed < 0.5 ? 0 : 1], k.r * 2.6, k.r * 1.7);
-  for (const b of bushes) agregar_visible(b.x, b.y, sprs.bush[b.berries], 62, 44);
   for (const t of tents) agregar_visible(t.x, t.y, sprs.tent[t.idx], 96, 66);
   for (const f of flags) // en Rover son invisibles hasta revelarlas
     if (f.done || cat.hint !== 'ruta') agregar_visible(f.x, f.y, sprs.flag[f.done ? 1 : 0][f.n - 1], 46, 120, f.cima ? montana.H : 0);
@@ -174,6 +176,7 @@ function dibujar_mundo() {
   for (const d of decos) if (Math.abs(d.x - px) + Math.abs(d.y - py) < 700) agregar_visible(d.x, d.y, sprs.tuft[d.k === 2 ? 2 : d.k % 2], 16, 14);
   rio_visibles();
   monte_visibles();
+  comedor_visibles();
   if (cascada) agregar_visible(cascada.x, cascada.y, 'cascada', 260, 230);
   agregar_visible(camp.x, camp.y, 'fogata', 60, 40);
 
@@ -184,6 +187,7 @@ function dibujar_mundo() {
     const alpha = it.z > FAR - 300 ? (FAR - it.z) / 300 : it.z < 90 ? Math.max(0.3, (it.z - 15) / 75) : 1;
     const L = nivel_niebla(it.z);
     if (it.spr === 'monte') monte_dibujar();
+    else if (it.spr === 'comedor') comedor_exterior_dibujar();
     else if (it.spr === 'cascada') dibujar_cascada(it.sx, bottom, it.sc, L, alpha);
     else if (it.spr === 'fogata') dibujar_fogata(it.sx, bottom, it.sc, L, alpha);
     else {
@@ -197,7 +201,7 @@ function dibujar_mundo() {
   // Noche: todo se pone azul (sin oscurecer); la fogata brilla naranja
   if (sky.n > 0) rect(0, 0, W, H, 'rgb(35,65,170)', 0.32 * sky.n);
   const dx = camp.x - player.x, dy = camp.y - player.y, fz = dx * cam_cs + dy * cam_sn;
-  if (fire.fuel > 0 && fz > 10 && fz < FAR) {
+  if (fire.fuel > 0 && fz > 10 && fz < FAR && !comedor_tapa(player.x, player.y, camp.x, camp.y)) {
     const sc = FOC / fz, x = W / 2 + (-dx * cam_sn + dy * cam_cs) * sc, y = HOR + ojo * sc - 20 * sc;
     const r = Math.min(W, (160 + fire.fuel) * sc * (1 + Math.sin(ahora() / 90) * 0.04));
     const gl = ctx.createRadialGradient(x, y, 0, x, y, r);

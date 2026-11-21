@@ -3,19 +3,19 @@
 // (Es la versión web del proyecto de GameMaker ScoutsGM, con las mismas reglas y números.)
 
 // ---------- Categorías scout = dificultades (el color del uniforme es solo de adorno) ----------
-// energy: qué tan rápido se gasta; fire_dur: cuánto dura la fogata comparada con Tropa (1.2 = 20 % más); lighter: probabilidad de prender con el encendedor en cada intento;
+// food: raciones con las que empiezas; energy: qué tan rápido se gasta; fire_dur: cuánto dura la fogata comparada con Tropa (1.2 = 20 % más); lighter: probabilidad de prender con el encendedor en cada intento;
 // corriente: qué tan fuerte jala el río (unidades por segundo); tambaleo: cuánto se mueve la canoa al remar varias veces del mismo lado;
 // muelle_desfase: cuánto se recorre el muelle del otro lado del río (en puntos de ~40 unidades; + = río abajo, - = contra la corriente);
 // monte_alto: alto del Cerro del Coyote; monte_angostos: pasos angostos con cuerda; rapel_seguro: velocidad máxima sin rasparte; rain: cada cuánto llueve (más bajo = más seguido)
 // hint: cómo son las pistas ('4' = N/S/E/O, '8' = con diagonales, 'grados' = rumbo en grados, 'ruta' = Rover)
 const CATEGORIES = [
-  { name: 'Lobezno/a', color: '#e8c23a', diff: 'Fácil', energy: 0.7, fire_dur: 1.2, lighter: 0.9, corriente: 12, tambaleo: 0.10, muelle_desfase: 0, monte_alto: 260, monte_angostos: 1, rapel_seguro: 95, rain: 1.4, food: 4, hint: '4',
+  { name: 'Lobezno/a', color: '#e8c23a', diff: 'Fácil', energy: 0.7, fire_dur: 1.2, lighter: 0.9, corriente: 12, tambaleo: 0.10, muelle_desfase: 0, monte_alto: 260, monte_angostos: 1, rapel_seguro: 95, rain: 1.4, food: 3, hint: '4',
     desc: ['Te cansas más lento y la', 'fogata dura más. Pistas:', 'norte, sur, este u oeste.'] },
   { name: 'Tropero/a', color: '#3fae4a', diff: 'Normal', energy: 1, fire_dur: 1, lighter: 0.8, corriente: 20, tambaleo: 0.14, muelle_desfase: 6, monte_alto: 330, monte_angostos: 2, rapel_seguro: 80, rain: 1, food: 2, hint: '8',
     desc: ['La aventura como es.', 'Pistas con noreste,', 'sureste, noroeste...'] },
-  { name: 'Caminante', color: '#3b7bd9', diff: 'Difícil', energy: 1.25, fire_dur: 0.9, lighter: 0.67, corriente: 28, tambaleo: 0.18, muelle_desfase: -6, monte_alto: 400, monte_angostos: 2, rapel_seguro: 70, rain: 0.8, food: 0, hint: 'grados',
+  { name: 'Caminante', color: '#3b7bd9', diff: 'Difícil', energy: 1.25, fire_dur: 0.9, lighter: 0.67, corriente: 28, tambaleo: 0.18, muelle_desfase: -6, monte_alto: 400, monte_angostos: 2, rapel_seguro: 70, rain: 0.8, food: 1, hint: 'grados',
     desc: ['Te cansas más rápido y', 'llueve más seguido.', 'Pistas en grados.'] },
-  { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire_dur: 0.75, lighter: 0.45, corriente: 38, tambaleo: 0.24, muelle_desfase: -11, monte_alto: 470, monte_angostos: 3, rapel_seguro: 60, rain: 0.6, food: 0, hint: 'ruta',
+  { name: 'Rover', color: '#d63a2f', diff: 'Muy difícil', energy: 1.5, fire_dur: 0.75, lighter: 0.45, corriente: 38, tambaleo: 0.24, muelle_desfase: -11, monte_alto: 470, monte_angostos: 3, rapel_seguro: 60, rain: 0.6, food: 1, hint: 'ruta',
     desc: ['Bases invisibles: gana', 'la pista con un reto,', 'sigue rumbo y pasos y', 'anótalo en la libreta.'] },
 ];
 
@@ -24,9 +24,9 @@ const DEFAULT_BINDS = { adelante: 'w', atras: 's', izquierda: 'a', derecha: 'd',
   correr: 'shift', usar: 'e', comer: 'f', mapa: 'm', marcar: 'q', libreta: 'l', reto: 'r' };
 const BIND_ORDER = ['adelante', 'atras', 'izquierda', 'derecha', 'arriba', 'abajo', 'correr', 'usar', 'comer', 'mapa', 'marcar', 'libreta', 'reto'];
 const BIND_NAMES = { adelante: 'Caminar adelante', atras: 'Caminar atrás', izquierda: 'Girar a la izquierda', derecha: 'Girar a la derecha',
-  arriba: 'Mirar arriba', abajo: 'Mirar abajo', correr: 'Correr', usar: 'Usar / recoger', comer: 'Comer', mapa: 'Mapa',
+  arriba: 'Mirar arriba', abajo: 'Mirar abajo', correr: 'Correr', usar: 'Usar / recoger', comer: 'Comer ración', mapa: 'Pasaporte',
   marcar: 'Marcar (Rover)', libreta: 'Libreta (Rover)', reto: 'Reto (Rover)' };
-const settings = { sens: 5, giro: 5, invert: false, cat: 1, musica: 5, binds: { ...DEFAULT_BINDS }, botones: {} }; // botones: los que moviste en el editor (celular)
+const settings = { sens: 5, giro: 5, invert: false, cat: 1, modo: 0, musica: 5, binds: { ...DEFAULT_BINDS }, botones: {} }; // botones: los que moviste en el editor (celular)
 ajustes_cargar();
 let cat = CATEGORIES[settings.cat];
 
@@ -52,7 +52,8 @@ function empezar_juego() {
   chaleco = false; canoa = null; rescate = null; canoa_manual_visto = false;
   tactil_soltar(); tactil_correr = false;
   time = 0.05; day = 1;
-  reto = null; book = false; reveal = null; mapa_abierto = false;
+  reto = null; book = false; reveal = null; mapa_abierto = false; pas_tab = 0;
+  comedor_reiniciar();
   creditos_paso = 'pregunta'; creditos_t = 0;
   energy = 100; wood = 0; food = cat.food;
   rain = false; rain_timer = 0; next_rain = (70 + random(60)) * cat.rain;
@@ -78,7 +79,7 @@ function actualizar(dt) {
       player.ang += raton.dx * k;
       player.pitch = clamp(player.pitch - raton.dy * k * (settings.invert ? -1 : 1), -0.5, 0.5);
     }
-  } else if (!tactil && raton.pulsado[0] && state === 'play' && !reto && !prender && !canoa && !rescate && !rapel && !book && !mapa_abierto && !raton_en_minimapa()) {
+  } else if (!tactil && raton.pulsado[0] && state === 'play' && !reto && !prender && !canoa && !rescate && !rapel && !book && !mapa_abierto && !comiendo && !raton_en_minimapa()) {
     capturar_raton();
   }
 
@@ -105,10 +106,7 @@ function actualizar(dt) {
   if (reveal) { revisar_libreta(dt); return; }
   if (reto) { reto_teclas(); return; }
   if (prender) { prender_actualizar(dt); return; }
-  if (mapa_abierto) { // el juego se pausa mientras ves el mapa grande
-    if (kp(settings.binds.mapa) || kp('escape') || toque_pulsado()) mapa_abierto = false;
-    return;
-  }
+  if (mapa_abierto) { pasaporte_actualizar(); return; } // el juego se pausa mientras ves el pasaporte
   if (book) {
     if (kp(settings.binds.libreta) || kp('escape')) book = false;
     else if (kp('backspace')) borrar_ultima_marca();
@@ -127,11 +125,19 @@ function actualizar(dt) {
   playTime += dt;
 
   // ---------- Tiempo y días ----------
-  time += dt / DAY_LEN;
+  time += dt / dia_len();
   if (time >= 1) { time -= 1; day++; toast('Amanece el día ' + day); }
 
   // ---------- Clima ----------
   clima_actualizar(dt);
+
+  comedor_actualizar(dt);
+  // ---------- Sentado comiendo: no te mueves hasta que acabas ----------
+  if (comiendo) {
+    comer_actualizar(dt);
+    supervivencia_actualizar(dt, false);
+    return;
+  }
 
   // ---------- Bajando en rapel / en la canoa o esperando el rescate ----------
   if (rapel || canoa || rescate) {
@@ -150,7 +156,7 @@ function actualizar(dt) {
   else if (kp(b.marcar)) accion_juego('marcar');
   else if (kp(b.reto)) accion_juego('reto');
   // si se abrió una ventanita (o te subiste a la canoa, empezaste el rapel...), este cuadro ya no caminas
-  if (mapa_abierto || book || reto || prender || canoa || rapel || state !== 'play') return;
+  if (mapa_abierto || book || reto || prender || canoa || rapel || comiendo || state !== 'play') return;
 
   // ---------- Movimiento en primera persona: A/D giran, W/S caminan hacia adelante/atrás ----------
   const ox = player.x, oy = player.y; // para la montaña (si no se puede pasar, regresas aquí)
@@ -180,10 +186,11 @@ function actualizar(dt) {
     if (d < m && d > 0.001) { player.x = s.x + dx / d * m; player.y = s.y + dy / d * m; }
   }
   monte_mover(ox, oy); // la montaña: chocar con ella, subir por el camino, cuerdas y cima
+  comedor_chocar(PR);  // paredes, mesas y la regla de la charola
   player.x = clamp(player.x, 30, WORLD - 30);
   player.y = clamp(player.y, 30, WORLD - 30);
 
-  // ---------- Supervivencia (ramas, bayas, fogata, energía) y lluvia ----------
+  // ---------- Supervivencia (ramas, fogata, energía) y lluvia ----------
   supervivencia_actualizar(dt, running);
   if (state === 'play' && fire.lit) bases_actualizar(); // las bases cuentan hasta que prendes la fogata
   if (state === 'play') lluvia_actualizar(dt);
@@ -196,7 +203,8 @@ function dibujar() {
   if (state === 'title') titulo_dibujar(); else if (state === 'creditos') creditos_dibujar(); else hud_dibujar();
   if (state === 'play') tactil_dibujar(); // botones del celular (no salen en el menú ni en las ventanitas)
   if (state === 'play' && canoa && canoa.manual) canoa_manual_dibujar();
-  if (state === 'play' && mapa_abierto) mapa_grande_dibujar();
+  if (state === 'play') comedor_vista_dibujar(); // la charola en tus manos
+  if (state === 'play' && mapa_abierto) pasaporte_dibujar();
   if (state === 'play' && book) libreta_dibujar();
   if (state === 'play' && reto) reto_dibujar();
   if (state === 'play' && prender) prender_dibujar();
@@ -206,7 +214,7 @@ function dibujar() {
   const otra = tactil ? '' : 'ENTER: intentarlo otra vez · Esc: elegir otra categoría';
   if (state === 'lose') {
     if (lose_reason === 'fogata') pantalla_final('Se apagó la fogata', ['Trae ramas seguido y échalas al fuego con ' + tecla_entre_corchetes('usar') + ' antes de que se acabe.', '', otra]);
-    else pantalla_final('Te quedaste sin energía', ['Come bayas con ' + tecla_entre_corchetes('comer') + ' y quédate cerca de la fogata en la noche.', '', otra]);
+    else pantalla_final('Te quedaste sin energía', ['Ve al comedor a las horas de comida (vienen en tu pasaporte), lleva raciones', 'y quédate cerca de la fogata en la noche.', '', otra]);
   }
   // si la pregunta de los créditos (arriba a la derecha) taparía el título, todo baja un poco
   const baja = state === 'win' && creditos_paso === 'pregunta' && W < 1100 && H / 2 - 110 < 150 ? Math.min(50, 150 - (H / 2 - 110)) : 0;

@@ -1,4 +1,4 @@
-// HUD: lo que se dibuja encima del mundo (textos, barras, brújula...), pantalla de inicio, mapa,
+// HUD: lo que se dibuja encima del mundo (textos, barras, brújula...), pantalla de inicio, mapa, pasaporte,
 // ajustes guardados, menú de Esc y créditos.
 
 // ---------- Iconitos (centrados en x, y; "t" = tamaño aproximado en píxeles) ----------
@@ -93,9 +93,10 @@ function hud_dibujar() {
   barra(24 * k, 46 * k, 212 * k, 'Energía', energy, energy < 25 ? '#d9432f' : '#e0a23a', k);
   barra(24 * k, 72 * k, 212 * k, 'Fogata', fire.fuel, fire.fuel < 25 ? '#d9432f' : '#e8692a', k);
   icono_rama(34 * k, 114 * k, -0.3, k);
-  blob(140 * k, 112 * k, 3.5 * k, '#c4243a'); blob(147 * k, 109 * k, 3.5 * k, '#c4243a'); blob(145 * k, 117 * k, 3.5 * k, '#c4243a');
+  // ración (un sándwich)
+  rect_redondo(132 * k, 106 * k, 18 * k, 5 * k, 2 * k, '#d9a85a', 1); rect(133 * k, 111 * k, 16 * k, 3 * k, '#7a9a3a'); rect_redondo(132 * k, 114 * k, 18 * k, 5 * k, 2 * k, '#d9a85a', 1);
   texto(52 * k, 119 * k, 'Leña: ' + wood + '/' + WOOD_MAX, fk(14, k), false, 'left', '#fff');
-  texto(156 * k, 119 * k, 'Bayas: ' + food + '/' + FOOD_MAX, fk(14, k), false, 'left', '#fff');
+  texto(156 * k, 119 * k, 'Raciones: ' + food + '/' + FOOD_MAX, fk(14, k), false, 'left', '#fff');
 
   // Insignia de la categoría (en el celular no: ya sabes cuál elegiste)
   if (!tactil) {
@@ -106,7 +107,7 @@ function hud_dibujar() {
   }
   brujula_dibujar(k);
 
-  if (state === 'play' && !reto && !prender && !canoa && !rescate && !rapel && !book && !mapa_abierto) {
+  if (state === 'play' && !reto && !prender && !canoa && !rescate && !rapel && !book && !mapa_abierto && !comiendo) {
     // Aviso de interacción
     const cerca = cerca_de_algo();
     if (cerca) pastilla(W / 2, H * (tactil ? 0.64 : 0.68), cerca.label, tactil ? fk(15, k) : 15, 1);
@@ -127,7 +128,7 @@ function hud_dibujar() {
   // Ayuda de controles (todas se pueden cambiar en el menú de Esc)
   const b = settings.binds, n = nombre_tecla;
   texto(14, H - 12, n(b.adelante) + '/' + n(b.atras) + ': caminar · ' + n(b.izquierda) + '/' + n(b.derecha)
-    + ': girar · mouse: mirar · ' + n(b.correr) + ': correr · ' + n(b.usar) + ': usar · ' + n(b.comer) + ': comer · ' + n(b.mapa) + ': mapa'
+    + ': girar · mouse: mirar · ' + n(b.correr) + ': correr · ' + n(b.usar) + ': usar · ' + n(b.comer) + ': ración · ' + n(b.mapa) + ': pasaporte'
     + (cat.hint === 'ruta' ? ' · ' + n(b.reto) + ': reto · ' + n(b.marcar) + ': marcar · ' + n(b.libreta) + ': libreta' : '')
     + ' · Esc: menú', 12, false, 'left', '#fff', 0.7);
   minimapa_dibujar();
@@ -203,7 +204,8 @@ function ir_al_titulo() {
   monte_modo = ''; cuerda = -1; rapel = null;
   fire = { fuel: 70, lit: true }; prender = null; chaleco = false; canoa = null; rescate = null; time = 0.1; day = 1; rain = false; drops = []; toasts = [];
   energy = 100; wood = 0; food = 0;
-  reto = null; book = false; reveal = null; mapa_abierto = false;
+  reto = null; book = false; reveal = null; mapa_abierto = false; pas_tab = 0;
+  comedor_reiniciar();
   titulo_hits = [];
   soltar_raton();
   state = 'title';
@@ -220,7 +222,9 @@ function titulo_actualizar() {
   if (kp('arrowleft') || kp('a')) elegir_categoria(settings.cat - 1);
   if (kp('arrowright') || kp('d')) elegir_categoria(settings.cat + 1);
   for (let k = 0; k < 4; k++) if (kp(String(k + 1))) elegir_categoria(k);
+  if (kp('m') || kp('tab')) { settings.modo = 1 - settings.modo; ajustes_guardar(); }
   if (toque_pulsado()) for (const h of titulo_hits) if (toque_dentro(h)) {
+    if (h.modo !== undefined) { settings.modo = h.modo; ajustes_guardar(); return; }
     // clic en una tarjeta la elige; clic en la ya elegida (o en Empezar) arranca
     if (h.cat < 0 || h.cat === settings.cat) empezar_juego(); else elegir_categoria(h.cat);
     return;
@@ -243,7 +247,7 @@ function titulo_dibujar() {
   const s = Math.min(1, W / 920, H / 620), ox = W / 2, oy = H / 2;
   titulo_hits = [];
   texto(ox, oy - 235 * s, 'Scouteando en Puebla', 46 * s, true, 'center', '#ffe9b0');
-  texto(ox, oy - 198 * s, 'Explora el bosque, completa los retos de las 5 bases y mantén viva la fogata.', 18 * s, false, 'center', '#fff');
+  texto(ox, oy - 198 * s, 'Explora el bosque, completa los retos de las 5 bases, mantén viva la fogata y no te pierdas las comidas.', 17 * s, false, 'center', '#fff');
   texto(ox, oy - 150 * s, 'Elige tu categoría', 20 * s, true, 'center', '#ffe9b0');
   CATEGORIES.forEach((c, i) => {
     const sel = i === settings.cat;
@@ -257,11 +261,21 @@ function titulo_dibujar() {
     texto(x + 14 * s, y + 20 * s, String(i + 1), 12 * s, false, 'center', '#fff', 0.4);
     titulo_hits.push({ x, y, w, h, cat: i });
   });
-  const bx = ox - 110 * s, by = oy + 172 * s;
-  rect_redondo(bx, by, 220 * s, 46 * s, 12 * s, cat.color, 1);
-  texto(ox, oy + 202 * s, 'Empezar', 20 * s, true, 'center', '#1a1a1a');
-  titulo_hits.push({ x: bx, y: by, w: 220 * s, h: 46 * s, cat: -1 });
-  texto(ox, oy + 245 * s, tactil ? 'Toca una categoría para elegirla y luego Empezar' : 'A/D, flechas o 1-4 para elegir · ENTER para empezar', Math.max(11, 14 * s), false, 'center', '#fff', 0.7);
+  // Modalidad (cuánto dura el día) y Empezar
+  const by = oy + 172 * s;
+  MODOS.forEach((m, i) => {
+    const mx = ox + (-430 + i * 205) * s, sel = i === settings.modo, mw = 195 * s;
+    rect_redondo(mx, by, mw, 46 * s, 12 * s, sel ? '#ffe9b0' : '#000', sel ? 1 : 0.35);
+    if (!sel) borde_redondo(mx, by, mw, 46 * s, 12 * s, '#fff', 0.2, 2 * s);
+    texto(mx + mw / 2, by + 21 * s, m.name, 17 * s, true, 'center', sel ? '#1a1a1a' : '#fff');
+    texto(mx + mw / 2, by + 38 * s, m.desc, 12 * s, false, 'center', sel ? '#3a2a14' : '#fff', sel ? 1 : 0.7);
+    titulo_hits.push({ x: mx, y: by, w: mw, h: 46 * s, modo: i });
+  });
+  const bx = ox + 10 * s;
+  rect_redondo(bx, by, 420 * s, 46 * s, 12 * s, cat.color, 1);
+  texto(bx + 210 * s, oy + 202 * s, 'Empezar', 20 * s, true, 'center', '#1a1a1a');
+  titulo_hits.push({ x: bx, y: by, w: 420 * s, h: 46 * s, cat: -1 });
+  texto(ox, oy + 245 * s, tactil ? 'Toca una categoría y una modalidad, y luego Empezar' : 'A/D, flechas o 1-4: categoría · M: modalidad · ENTER: empezar', Math.max(11, 14 * s), false, 'center', '#fff', 0.7);
 }
 
 // ---------- Mapa del bosque ----------
@@ -292,13 +306,18 @@ function mapa_construir() {
     circ(mt.rapel.x, mt.rapel.y, 20, '#3a2a14');
   }
   if (cascada) circ(cascada.x, cascada.y - cascada.r, 60, '#8b8d88');
+  if (comedor) { // comedor: techo gris con el porche café
+    const c = comedor;
+    g.fillStyle = '#8a6a48'; g.fillRect(c.x0 * k, c.y1 * k, (c.x1 - c.x0) * k, c.porche * k);
+    g.fillStyle = '#9a9fa4'; g.fillRect(c.x0 * k, c.y0 * k, (c.x1 - c.x0) * k, (c.y1 - c.y0) * k);
+    g.fillStyle = '#b98f62'; g.fillRect((c.x - 34) * k, (camp.y + 215) * k, 68 * k, (c.y0 - camp.y - 215) * k);
+  }
   for (const m of muelles) for (let j = 0; j <= 5; j++) { const d = m.w + 45 - j * 21; circ(m.cx + m.ox * d, m.cy + m.oy * d, 16, '#6b4a2b'); }
   for (const r of rocks) circ(r.x, r.y, r.r, '#8b8d88');
   circ(camp.x, camp.y, 230, '#b39b62');
   for (const t of tents) circ(t.x, t.y, 34, t.color);
   circ(camp.x, camp.y, 30, '#e8692a');
-  const arbol = mundo_lugar('arbol');
-  if (arbol) { circ(arbol.x, arbol.y, 135, '#2d5a26'); circ(arbol.x - 30, arbol.y - 30, 60, '#3f7a33'); }
+  for (const arbol of landmarks.filter(l => l.kind === 'arbol')) { circ(arbol.x, arbol.y, 135, '#2d5a26'); circ(arbol.x - 30, arbol.y - 30, 60, '#3f7a33'); }
   g.strokeStyle = 'rgba(60,40,20,0.6)'; g.lineWidth = 6; g.strokeRect(0, 0, MAP_RES, MAP_RES); // marco
   // copia ya achicada para el minimapa (se ve más suave que achicar el grande en cada cuadro)
   const m = mapa_mini.getContext('2d');
@@ -349,17 +368,112 @@ function minimapa_dibujar() {
   ctx.drawImage(mapa_mini, x0, y0);
   rosa_vientos(x0 + 20, y0 + 20, 15, false);
   rect_redondo(x0 + MAP / 2 - 52, y0 + MAP - 22, 104, 18, 6, '#000', 0.6);
-  texto(x0 + MAP / 2, y0 + MAP - 9, '[' + nombre_tecla(settings.binds.mapa) + '] agrandar', 11, true, 'center', '#fff');
+  texto(x0 + MAP / 2, y0 + MAP - 9, '[' + nombre_tecla(settings.binds.mapa) + '] pasaporte', 11, true, 'center', '#fff');
 }
-// Mapa grande con los nombres de los lugares (el juego se pausa mientras lo ves)
-function mapa_grande_dibujar() {
+// ---------- Pasaporte (con M): Mapa, Sellos de las bases y Horarios del comedor ----------
+// Como el pasaporte de los camporees. El juego se pausa mientras lo ves.
+let pas_tab = 0, pas_hits = [], pas_panel = { x: 0, y: 0, w: 0, h: 0 };
+const PAS_TABS = ['Mapa', 'Sellos', 'Horarios'];
+const SELLO_COLORES = ['#c0392b', '#2a6fb0', '#2e8b3a', '#8e44ad', '#d9813b'];
+function pasaporte_actualizar() {
+  if (kp(settings.binds.mapa) || kp('escape')) { mapa_abierto = false; return; }
+  for (let k = 0; k < PAS_TABS.length; k++) if (kp(String(k + 1))) pas_tab = k;
+  if (kp('arrowright') || kp('tab') || kp(settings.binds.derecha)) pas_tab = (pas_tab + 1) % PAS_TABS.length;
+  if (kp('arrowleft') || kp(settings.binds.izquierda)) pas_tab = (pas_tab + PAS_TABS.length - 1) % PAS_TABS.length;
+  if (toque_pulsado()) {
+    for (const h of pas_hits) if (toque_dentro(h)) { if (h.act === 'tab') pas_tab = h.arg; else mapa_abierto = false; return; }
+    if (!toque_dentro(pas_panel)) mapa_abierto = false; // tocar afuera lo cierra
+  }
+}
+function pasaporte_dibujar() {
   rect(0, 0, W, H, '#000', 0.7);
-  const size = Math.min(W, H) - (tactil ? 70 : 110), x0 = (W - size) / 2, y0 = (H - size) / 2;
-  rect_redondo(x0 - 10, y0 - 10, size + 20, size + 20, 14, '#d8cfb4', 1);
-  mapa_dibujar_en(x0, y0, size);
-  rosa_vientos(x0 + 62, y0 + 62, 42, true);
-  texto(W / 2, y0 - 20, 'Mapa del bosque', 20, true, 'center', '#ffe9b0');
-  texto(W / 2, Math.min(y0 + size + 32, H - 6), tactil ? 'Toca para cerrar' : nombre_tecla(settings.binds.mapa) + ' o clic para cerrar', 14, false, 'center', '#fff');
+  const pw = Math.min(W - 12, 860), ph = Math.min(H - 12, 640), x0 = (W - pw) / 2, y0 = (H - ph) / 2;
+  const k = Math.min(1, pw / 760, ph / 560); // en pantallas chicas todo se achica
+  pas_panel = { x: x0, y: y0, w: pw, h: ph }; pas_hits = [];
+  panel_borde(x0, y0, pw, ph, 16 * k, '#f4ecd2', '#2f5a3a', 5 * k);
+  const cafe = '#3a2a14', gris = '#6b5a3a';
+  texto(x0 + 22 * k, y0 + 34 * k, 'Pasaporte scout', 22 * k, true, 'left', '#2f5a3a');
+  texto(x0 + pw - 22 * k, y0 + 34 * k, cat.name + ' · ' + MODOS[settings.modo].name, 14 * k, true, 'right', gris);
+  // pestañas
+  const tw = Math.min(170 * k, (pw - 40 * k) / 3), th = 34 * k, ty = y0 + 48 * k;
+  PAS_TABS.forEach((t, i) => {
+    const tx = x0 + 20 * k + i * (tw + 8 * k), sel = i === pas_tab;
+    rect_redondo(tx, ty, tw, th, 9 * k, sel ? '#2f5a3a' : '#d8cfb4', 1);
+    texto(tx + tw / 2, ty + th / 2 + 6 * k, (tactil ? '' : (i + 1) + '. ') + t, 16 * k, true, 'center', sel ? '#fff' : cafe);
+    pas_hits.push({ x: tx, y: ty, w: tw, h: th, act: 'tab', arg: i });
+  });
+  // botón de cerrar (para el celular; en la compu también sirve)
+  const cw = 40 * k;
+  rect_redondo(x0 + pw - cw - 14 * k, ty, cw, th, 9 * k, '#c0392b', 1);
+  texto(x0 + pw - cw / 2 - 14 * k, ty + th / 2 + 7 * k, 'X', 18 * k, true, 'center', '#fff');
+  pas_hits.push({ x: x0 + pw - cw - 14 * k, y: ty, w: cw, h: th, act: 'cerrar' });
+  const ax = x0 + 20 * k, ay = ty + th + 12 * k, aw = pw - 40 * k, ah = ph - (ay - y0) - 34 * k;
+  if (pas_tab === 0) pasaporte_mapa(ax, ay, aw, ah);
+  else if (pas_tab === 1) pasaporte_sellos(ax, ay, aw, ah, k);
+  else pasaporte_horarios(ax, ay, aw, ah, k);
+  texto(W / 2, y0 + ph - 12 * k, tactil ? 'Toca una pestaña · toca afuera o la X para cerrar'
+    : '1-3 o flechas: cambiar de hoja · ' + nombre_tecla(settings.binds.mapa) + ' o Esc: cerrar', 13 * k, false, 'center', gris);
+}
+function pasaporte_mapa(ax, ay, aw, ah) {
+  const size = Math.min(aw, ah), x = ax + (aw - size) / 2;
+  rect_redondo(x - 5, ay - 5, size + 10, size + 10, 8, '#d8cfb4', 1);
+  mapa_dibujar_en(x, ay, size);
+  rosa_vientos(x + size * 0.09, ay + size * 0.09, size * 0.06, size > 300);
+}
+// Un sello redondo (girado), como los que ponen en cada base
+function sello_dibujar(cx, cy, r, f) {
+  const col = SELLO_COLORES[(f.n - 1) % SELLO_COLORES.length];
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(-0.2 + f.n * 0.09);
+  ctx.globalAlpha = 0.85;
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(2, r * 0.08); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
+  ctx.lineWidth = Math.max(1, r * 0.03); ctx.beginPath(); ctx.arc(0, 0, r * 0.82, 0, 7); ctx.stroke();
+  ctx.globalAlpha = 1;
+  texto(0, -r * 0.3, 'BASE ' + f.n, r * 0.3, true, 'center', col, 0.9);
+  texto(0, r * 0.08, f.sello ? f.sello.clave : '', r * 0.17, true, 'center', col, 0.9);
+  texto(0, r * 0.4, f.sello ? 'Día ' + f.sello.dia + ' · ' + f.sello.hora : '', r * 0.15, false, 'center', col, 0.9);
+  ctx.restore();
+}
+function pasaporte_sellos(ax, ay, aw, ah, k) {
+  const cafe = '#3a2a14', gris = '#6b5a3a';
+  texto(ax + aw / 2, ay + 22 * k, 'Sellos de las bases: ' + bases_hechas() + ' de ' + NUM_FLAGS, 18 * k, true, 'center', cafe);
+  const cols = 3, rows = 2, cw = aw / cols, rh = (ah - 40 * k) / rows, r = Math.min(cw, rh) * 0.36;
+  flags.forEach((f, i) => {
+    const row = i < 3 ? 0 : 1, col = row === 0 ? i : i - 3 + 0.5;
+    const cx = ax + (col + 0.5) * cw, cy = ay + 40 * k + (row + 0.5) * rh;
+    if (f.done) sello_dibujar(cx, cy, r, f);
+    else {
+      ctx.setLineDash([6, 6]); circulo(cx, cy, r, '#b8a98a', 1, true, 2); ctx.setLineDash([]);
+      texto(cx, cy - r * 0.05, 'Base ' + f.n, r * 0.26, true, 'center', '#b8a98a');
+      texto(cx, cy + r * 0.3, 'sin sello', r * 0.17, false, 'center', '#b8a98a');
+    }
+  });
+  if (!bases_hechas()) texto(ax + aw / 2, ay + ah - 6 * k, 'Resuelve el reto de cada base para que te pongan su sello.', 14 * k, false, 'center', gris);
+}
+function pasaporte_horarios(ax, ay, aw, ah, k) {
+  const cafe = '#3a2a14', gris = '#6b5a3a', verde = '#2e8b3a', h = hora();
+  const hh = Math.floor(h), mm = Math.floor((h - hh) * 60 / 10) * 10;
+  texto(ax + aw / 2, ay + 22 * k, 'Horarios del comedor', 20 * k, true, 'center', cafe);
+  texto(ax + aw / 2, ay + 46 * k, 'Ahora: día ' + day + ', ' + hh + ':' + dos(mm) + ' · Modalidad ' + MODOS[settings.modo].name + ' (' + MODOS[settings.modo].desc.toLowerCase() + ')', 14 * k, false, 'center', gris);
+  const actual = comida_actual();
+  const fh = Math.min(74 * k, (ah - 170 * k) / 3);
+  COMIDAS.forEach((c, i) => {
+    const y = ay + 62 * k + i * (fh + 8 * k), ya = comidas_hechas.has(clave_comida(i));
+    const ahora_si = i === actual;
+    rect_redondo(ax, y, aw, fh, 10 * k, ahora_si ? '#dcefd2' : '#ebe2c8', 1);
+    texto(ax + 16 * k, y + fh * 0.42, c.name, 19 * k, true, 'left', cafe);
+    texto(ax + 16 * k, y + fh * 0.78, hora_txt(c.ini) + ' a ' + hora_txt(c.fin) + ' · ' + c.menu, 14 * k, false, 'left', gris);
+    let est, col;
+    if (ya) { est = 'Ya comiste'; col = verde; }
+    else if (ahora_si) { est = '¡Ahora! Ve al comedor'; col = '#c0392b'; }
+    else if (h >= c.fin) { est = 'Ya pasó'; col = '#9a8a6a'; }
+    else { est = 'Más tarde'; col = gris; }
+    texto(ax + aw - 16 * k, y + fh * 0.55, est, 15 * k, true, 'right', col);
+  });
+  const notas = ['Fuera de horario solo te dan algo chico (fruta y pan).',
+    'En la ventanilla de Agua y raciones te dan 2 raciones para el camino (caben ' + RACIONES_MAX + ').',
+    'Antes de salir, deja tu charola en Devolución.'];
+  const ny = ay + 62 * k + 3 * (fh + 8 * k) + 18 * k;
+  notas.forEach((n, i) => texto(ax + 10 * k, ny + i * 22 * k, '• ' + n, 14 * k, false, 'left', cafe));
 }
 
 // ---------- Ajustes guardados (en este navegador) ----------
@@ -374,6 +488,7 @@ function ajustes_cargar() {
     if (s.invert !== undefined) settings.invert = !!s.invert;
     if (num(s.musica)) settings.musica = clamp(Math.round(s.musica), 0, 10);
     if (num(s.cat)) settings.cat = clamp(Math.round(s.cat), 0, CATEGORIES.length - 1);
+    if (num(s.modo)) settings.modo = clamp(Math.round(s.modo), 0, MODOS.length - 1);
     if (s.botones && typeof s.botones === 'object') // dónde pusiste cada botón del celular
       for (const id in s.botones) {
         const c = s.botones[id];

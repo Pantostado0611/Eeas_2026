@@ -14,6 +14,8 @@ const con_art = (prep, l) => (prep + ' ' + l.art + ' ' + l.name).replace('de el 
 const base_siguiente = () => flags.find(f => !f.done);               // primera base que falta
 const base_sin_marcar = () => flags.find(f => !f.done && !f.mark);   // Rover: primera sin hacer y sin marcar
 const bases_hechas = () => flags.filter(f => f.done).length;
+// Lo que dice el sello de una base en el pasaporte
+function sello_nuevo(clave) { const h = hora(); return { clave, dia: day, hora: Math.floor(h) + ':' + dos(Math.floor((h % 1) * 6) * 10) }; }
 
 // ¿La línea recta de a a b va toda por tierra? (sin cruzar ríos ni lagos)
 function ruta_por_tierra(a, b) {
@@ -25,11 +27,12 @@ function ruta_por_tierra(a, b) {
 // Se prefieren lugares desde donde se pueda caminar en línea recta hasta la base sin cruzar agua.
 function pick_ref(f) {
   let c = [], todos = [];
-  // pasadas: [distancia mínima, 2 = por tierra / 1 = mismo lado del río / 0 = cualquiera]
-  for (const [min, regla] of [[400, 2], [120, 2], [120, 1], [400, 0]]) {
+  // pasadas: [distancia mínima, 2 = por tierra / 1 = mismo lado del río / 0 = cualquiera, distancia máxima]
+  // (primero se buscan lugares a no más de 80 pasos de la base)
+  for (const [min, regla, max] of [[400, 2, PISTA_MAX], [120, 2, PISTA_MAX], [120, 1, PISTA_MAX], [400, 2, Infinity], [120, 1, Infinity], [400, 0, Infinity]]) {
     if (todos.length) break;
     for (const l of landmarks) {
-      let ok = ['claro', 'roca', 'arbol', 'pinar', 'muelle', 'cascada'].includes(l.kind) && dist(l, f) > min;
+      let ok = REF_ROVER.includes(l.kind) && dist(l, f) > min && dist(l, f) <= max;
       if (ok && regla >= 1) ok = mismo_lado(l, f);
       if (ok && regla === 2) ok = ruta_por_tierra(l, f);
       if (ok) { todos.push(l); if (l !== last_ref) c.push(l); }
@@ -152,12 +155,13 @@ function responder_reto(ans) {
   if (String(ans).trim() === '') { reto.msg = 'Escribe tu respuesta primero.'; return; }
   const f = reto.f;
   if (reto_correcto(reto.c, ans)) {
+    const clave = CLAVE_NOMBRES[reto.c.key];
     cerrar_reto(); f.wait = false;
     if (cat.hint === 'ruta') { f.unlocked = true; pick_ref(f); toast('Pista de la Base ' + f.n + ': ' + flag_hint(f), 7); }
     else {
-      f.done = true;
+      f.done = true; f.sello = sello_nuevo('Clave ' + clave);
       const left = NUM_FLAGS - bases_hechas();
-      toast(left > 0 ? '¡Base ' + f.n + ' completada! Faltan ' + left + '.' : '¡Todas las bases! Regresa al campamento.', 4);
+      toast(left > 0 ? '¡Base ' + f.n + ' completada! Ya tienes su sello en tu pasaporte. Faltan ' + left + '.' : '¡Todas las bases! Regresa al campamento.', 4);
     }
   } else {
     reto.c = nuevo_reto(f); texto_tecleado = '';
@@ -224,7 +228,7 @@ function revisar_libreta(dt) {
     const f = flags[reveal.i++];
     if (f.done) return;
     const ok = Math.abs(f.mark.steps - f.route.steps) <= TOL_STEPS && ang_diff(f.mark.deg, f.route.deg) <= TOL_DEG;
-    if (ok) { f.done = true; f.result = 'ok'; }
+    if (ok) { f.done = true; f.result = 'ok'; f.sello = sello_nuevo('Rumbo y pasos'); }
     else { f.result = 'mal'; f.mark = null; f.unlocked = false; } // si falla, hay que hacer otro reto
   } else if (reveal.t > 1.6) {
     reveal = null;

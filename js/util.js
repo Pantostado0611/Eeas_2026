@@ -9,13 +9,20 @@ addEventListener('resize', resize);
 resize();
 
 // ---------- Constantes ----------
-const WORLD = 4000;        // tamaño del mundo
+const WORLD = 8000;        // tamaño del mundo
+const DISENO = 4000;       // el bosque se diseñó en 4000 x 4000: las posiciones fijas se multiplican por ESC
+const ESC = WORLD / DISENO;
 const NUM_FLAGS = 5;
 const STEP = 20;           // unidades del mundo por cada paso (Rover)
 const CAMP_ZONE = 230;     // radio de la zona de acampado
 const TOL_STEPS = 5;       // margen permitido al marcar en la libreta (pasos)
 const TOL_DEG = 15;        // margen permitido al marcar en la libreta (grados)
-const DAY_LEN = 240;       // segundos por día completo
+// Modalidades: cuánto dura un día completo (en segundos reales)
+const MODOS = [
+  { name: 'Express', dia: 600, desc: 'Días de 10 minutos' },
+  { name: 'Relajada', dia: 1200, desc: 'Días de 20 minutos' },
+];
+const dia_len = () => MODOS[settings.modo].dia;
 const FOV = 1.6;           // ángulo de visión (radianes, ~92°)
 const EYE = 55;            // altura de los ojos
 const FAR = 1500;          // más allá de esto ya no se dibuja nada (niebla)

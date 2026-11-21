@@ -1,11 +1,13 @@
 // Generación del mundo (bosque, lagos, ríos, cerro, cascada, bases y lugares con nombre).
 // IMPORTANTE: el orden de las llamadas a rr()/rnd() no se debe cambiar: así la semilla 20261101
 // arma siempre el mismo bosque (igual que en la versión de GameMaker).
+// El mapa mide WORLD (8000). Las bases, los primeros 4 lagos, los ríos, el cerro y la cascada se diseñaron en un
+// mapa de 4000 (DISENO): se calculan igual que antes y sus posiciones se multiplican por ESC (2).
 
 const camp = { x: WORLD / 2, y: WORLD / 2 };
-let trees = [], rocks = [], bushes = [], sticks = [], lakes = [], lake_water = [], rios = [], muelles = [];
+let trees = [], rocks = [], sticks = [], lakes = [], lake_water = [], rios = [], muelles = [];
 let flags = [], tents = [], decos = [], solids = [], landmarks = [];
-let montana = null, cascada = null, mundo_cat = -1, last_ref = null;
+let montana = null, cascada = null, comedor = null, mundo_cat = -1, last_ref = null;
 
 // ¿Hay lugar libre en (x, y) con radio r, sin chocar con nada de la lista (dejando "pad" de margen)?
 function mundo_libre(x, y, r, lista, pad) {
@@ -92,6 +94,8 @@ function rio_tangente(linea, i) {
 // afluentes: otras líneas que desembocan en el río; cruce: dónde van los muelles;
 // nombres: [muelle del lado del campamento, muelle del otro lado]; etq: en qué parte del río (0 a 1) va su nombre en el mapa
 function rio_crear(indice, nombre, pts, ancho, afluentes, cruce, nombres, etq) {
+  const esc = l => l.map(p => [p[0] * ESC, p[1] * ESC]); // los puntos están en el mapa de diseño
+  pts = esc(pts); afluentes = afluentes.map(esc); cruce = [cruce[0] * ESC, cruce[1] * ESC];
   const rio = { name: nombre, linea: rio_suavizar(pts, 40), afl: [], circ: [], etq: null, seguridad: null, tiras: [] };
   const n = rio.linea.length;
   for (let i = 0; i < n; i++) rio.circ.push({ x: rio.linea[i][0], y: rio.linea[i][1], r: ancho + 14 * Math.sin(i * 0.37) });
@@ -233,7 +237,7 @@ function monte_polar(a, u) {
 }
 
 function montana_crear() {
-  const m = { name: 'Cerro del Coyote', x: 650, y: 3820, H: cat.monte_alto, rc: 55, Rb: 450,
+  const m = { name: 'Cerro del Coyote', x: 650 * ESC, y: 3820 * ESC, H: cat.monte_alto, rc: 55, Rb: 450,
     camino: [], cam_s: [], largo: 0, ancho: 70, ancho_angosto: 30, angostos: [], postes: [],
     rapel: null, v: [], col: [], nor: [], tiras: [], deco: [], K: 7, N: 40 };
   montana = m;
@@ -357,73 +361,116 @@ const monte_zona = () => montana ? [{ x: montana.x, y: montana.y, r: montana.Rb 
 
 // La cascada cae a una poza (agua) en una esquina del Río Azul. El lugar con nombre queda al pie, en tierra.
 function cascada_crear() {
-  cascada = { x: 3000, y: 250, r: 100 };
+  cascada = { x: 3000 * ESC, y: 250 * ESC, r: 100 };
   lake_water.push({ x: cascada.x, y: cascada.y, r: cascada.r });
 }
+
+// Más lagos y lugares con nombre para el mapa grande (ver mundo_generar)
+const LAGOS_EXTRA = [['la', 'Laguna Verde'], ['el', 'Lago del Pato'], ['la', 'Charca de los Sapos'], ['el', 'Lago Escondido']];
+const LUGARES = [['el', 'Claro de las Flores', 'claro', 170], ['la', 'Roca del Águila', 'roca', 90], ['el', 'Árbol Gigante', 'arbol', 110],
+  ['el', 'Pinar Oscuro', 'pinar', 380], ['el', 'Claro del Venado', 'claro', 150], ['la', 'Piedra del Tecolote', 'roca', 90],
+  ['el', 'Pinar de los Búhos', 'pinar', 340], ['el', 'Encino Viejo', 'arbol', 110]];
+// Si una base queda a más de 80 pasos de todos los lugares con nombre, se pone uno de estos cerca de ella
+const LUGARES_BASE = [['la', 'Roca Partida', 'roca', 90], ['el', 'Claro del Conejo', 'claro', 140], ['el', 'Ahuehuete Solo', 'arbol', 110],
+  ['la', 'Piedra Bola', 'roca', 90], ['el', 'Claro de las Mariposas', 'claro', 140]];
+const PISTA_MAX = 80 * STEP; // ninguna base a más de 80 pasos de su lugar de referencia
+const REF_ROVER = ['claro', 'roca', 'arbol', 'pinar', 'muelle', 'cascada']; // lugares desde donde el Rover cuenta pasos
 
 function mundo_generar(semilla) {
   rnd = Mulberry32(semilla);
   mundo_cat = settings.cat; // los muelles dependen de la sección
-  trees = []; rocks = []; bushes = []; sticks = []; lakes = []; flags = []; tents = []; decos = [];
+  trees = []; rocks = []; sticks = []; lakes = []; flags = []; tents = []; decos = [];
+  const C = DISENO / 2; // el campamento en el mapa de diseño
 
   // Banderas (bases) en anillo alrededor del campamento
   const off = rnd() * PI * 2;
   for (let i = 0; i < NUM_FLAGS; i++) {
     const a = off + i / NUM_FLAGS * PI * 2 + rr(-0.25, 0.25);
-    const d = rr(1000, 1650);
+    const d = rr(1000, 1650) * ESC;
     flags.push({ x: camp.x + Math.cos(a) * d, y: camp.y + Math.sin(a) * d, r: 30, n: i + 1, done: false,
-      lm: null, route: null, ref: null, mark: null, result: null, unlocked: false, wait: false, used: [], cima: false });
+      lm: null, route: null, ref: null, mark: null, result: null, unlocked: false, wait: false, used: [], cima: false, sello: null });
   }
-  const keep = [{ x: camp.x, y: camp.y, r: 260 }, ...flags.map(f => ({ x: f.x, y: f.y, r: 110 }))];
-
-  // Lagos
-  for (let tries = 0; lakes.length < 4 && tries < 200; tries++) {
-    const lx = rr(300, WORLD - 300), ly = rr(300, WORLD - 300), lr = rr(130, 240);
-    if (mundo_libre(lx, ly, lr, keep, 40) && mundo_libre(lx, ly, lr, lakes, 150)) lakes.push({ x: lx, y: ly, r: lr });
+  // Lagos (los primeros 4 en el mapa de diseño: los ríos pasan por ellos)
+  const keepD = [{ x: C, y: C, r: 260 }, ...flags.map(f => ({ x: f.x / ESC, y: f.y / ESC, r: 110 }))], lakesD = [];
+  for (let tries = 0; lakesD.length < 4 && tries < 200; tries++) {
+    const lx = rr(300, DISENO - 300), ly = rr(300, DISENO - 300), lr = rr(130, 240);
+    if (mundo_libre(lx, ly, lr, keepD, 40) && mundo_libre(lx, ly, lr, lakesD, 150)) lakesD.push({ x: lx, y: ly, r: lr });
   }
+  lakes = lakesD.map(l => ({ x: l.x * ESC, y: l.y * ESC, r: l.r }));
   // Cada lago con una forma distinta, sacadas en desorden de esta lista (con su propio azar)
   const formas = ['ovalo', 'lagrima', 'brazos', 'chueco', 'dos'], gf = Mulberry32(semilla + 4242);
   for (let i = formas.length - 1; i > 0; i--) { const j = Math.floor(gf() * (i + 1)); [formas[i], formas[j]] = [formas[j], formas[i]]; }
   lakes.forEach((l, i) => lago_forma(l, i, semilla, formas[i % formas.length]));
   lake_water = lagos_agua();
+  const n_lagos = lake_water.length;
   rios_crear(); // agrega el agua de los ríos a lake_water
   cascada_crear();
   montana_crear();
   // la Base 4 queda en la cima de la montaña
   flags[3].x = montana.x; flags[3].y = montana.y; flags[3].cima = true;
-  keep[4].x = montana.x; keep[4].y = montana.y;
+  comedor_crear(); // junto al campamento (ver comedor.js)
+
+  // Lo que no se puede tapar con lagos ni lugares: campamento, comedor, bases, cerro, cascada
+  const keep = [{ x: camp.x, y: camp.y, r: 260 }, { x: comedor.x, y: comedor.y, r: comedor.radio + 60 },
+    ...flags.map(f => ({ x: f.x, y: f.y, r: 110 })), { x: montana.x, y: montana.y, r: montana.Rb + 120 }, { x: cascada.x, y: cascada.y, r: 200 }];
+  const agua_rios = lake_water.slice(n_lagos); // el agua de los ríos y la poza
+  // Más lagos en el resto del mapa (con su propio azar)
+  const gl = Mulberry32(semilla + 555);
+  for (let tries = 0; lakes.length < 4 + LAGOS_EXTRA.length && tries < 400; tries++) {
+    const lx = 400 + gl() * (WORLD - 800), ly = 400 + gl() * (WORLD - 800), lr = 140 + gl() * 120;
+    if (mundo_libre(lx, ly, lr, keep, 150) && mundo_libre(lx, ly, lr, lakes, 900) && mundo_libre(lx, ly, lr, agua_rios, 200)) {
+      lakes.push({ x: lx, y: ly, r: lr }); lago_forma(lakes[lakes.length - 1], lakes.length - 1, semilla, formas[(lakes.length - 1) % formas.length]);
+    }
+  }
+  lake_water = [...lagos_agua(), ...agua_rios];
 
   // Lugares característicos: salen con su nombre en el mapa grande
-  const lake_names = [['el', 'Lago Espejo'], ['la', 'Laguna Azul'], ['el', 'Lago de las Ranas'], ['el', 'Charco del Oso']];
+  const lake_names = [['el', 'Lago Espejo'], ['la', 'Laguna Azul'], ['el', 'Lago de las Ranas'], ['el', 'Charco del Oso'], ...LAGOS_EXTRA];
   landmarks = lakes.map((l, i) => ({ art: lake_names[i][0], name: lake_names[i][1], kind: 'lago', x: l.x, y: l.y, r: l.r, zone: l.r + 90 }));
   landmarks.push({ art: 'el', name: 'Campamento', kind: 'camp', x: camp.x, y: camp.y, r: 230, zone: 230 });
+  landmarks.push({ art: 'el', name: 'Comedor', kind: 'comedor', x: comedor.x, y: comedor.y, r: comedor.radio, zone: comedor.radio + 40 });
   for (const m of muelles) landmarks.push({ art: 'el', name: m.name, kind: 'muelle', x: m.x, y: m.y, r: 50, zone: 110 });
   landmarks.push({ art: 'el', name: montana.name, kind: 'montana', x: montana.x, y: montana.y, r: montana.Rb, zone: montana.Rb + 60 });
   landmarks.push({ art: 'la', name: 'Cascada Escondida', kind: 'cascada', x: cascada.x, y: cascada.y + 170, r: 60, zone: 220 });
-  const spots = [['el', 'Claro de las Flores', 'claro', 170], ['la', 'Roca del Águila', 'roca', 90],
-    ['el', 'Árbol Gigante', 'arbol', 110], ['el', 'Pinar Oscuro', 'pinar', 380]];
-  for (const [art, name, kind, r] of spots) {
+  // ¿Se puede poner un lugar de tamaño r en (px, py)?
+  const lugar_libre = (px, py, r, kind) => (kind === 'pinar'
+    ? mundo_libre(px, py, r * 0.4, landmarks, 100) && mundo_libre(px, py, r * 0.4, keep, 0)
+    : mundo_libre(px, py, r, keep, 40) && mundo_libre(px, py, r, landmarks, 120))
+    && mundo_libre(px, py, kind === 'pinar' ? r * 0.4 : r, lake_water, 40); // que no caiga en un río
+  for (const [art, name, kind, r] of LUGARES) {
     for (let tries = 0; tries < 400; tries++) {
       const px = rr(350, WORLD - 350), py = rr(350, WORLD - 350);
-      let ok = kind === 'pinar'
-        ? mundo_libre(px, py, r * 0.4, landmarks, 100)
-        : (mundo_libre(px, py, r, keep, 40) && mundo_libre(px, py, r, landmarks, 120));
-      if (ok) ok = mundo_libre(px, py, kind === 'pinar' ? r * 0.4 : r, lake_water, 40); // que no caiga en un río
-      if (ok) { landmarks.push({ art, name, kind, x: px, y: py, r, zone: r + 40 }); break; }
+      if (lugar_libre(px, py, r, kind)) { landmarks.push({ art, name, kind, x: px, y: py, r, zone: r + 40 }); break; }
+    }
+  }
+  // Ninguna base lejos de un lugar con nombre (del mismo lado del río): si hace falta, se pone uno cerca
+  const gb = Mulberry32(semilla + 777);
+  let extra = 0;
+  // (cuentan los lugares desde donde el Rover puede medir sus pasos: ver pick_ref en bases.js)
+  for (const f of flags) {
+    const cerca = landmarks.some(l => REF_ROVER.includes(l.kind) && mismo_lado(f, l) && pdist(f.x, f.y, l.x, l.y) <= PISTA_MAX - 300 && pdist(f.x, f.y, l.x, l.y) > 400);
+    if (cerca || extra >= LUGARES_BASE.length) continue;
+    const [art, name, kind, r] = LUGARES_BASE[extra];
+    for (let tries = 0; tries < 300; tries++) {
+      const a = gb() * PI * 2, d = 450 + r + gb() * 600, px = f.x + Math.cos(a) * d, py = f.y + Math.sin(a) * d;
+      if (px < 300 || py < 300 || px > WORLD - 300 || py > WORLD - 300) continue;
+      if (!mismo_lado(f, { x: px, y: py }) || !lugar_libre(px, py, r, kind)) continue;
+      landmarks.push({ art, name, kind, x: px, y: py, r, zone: r + 40 }); extra++;
+      break;
     }
   }
   const blocked = [...keep, ...lake_water, ...landmarks.filter(l => l.kind === 'claro' || l.kind === 'roca' || l.kind === 'arbol')];
-  blocked.push({ x: montana.x, y: montana.y, r: montana.Rb + 120 }, { x: cascada.x, y: cascada.y, r: 150 }); // ni en la montaña ni en la cascada
   for (const m of muelles) blocked.push({ x: m.x, y: m.y, r: 60 }, { x: m.rack.x, y: m.rack.y, r: 45 }); // nada de árboles en los muelles
-  const roca = mundo_lugar('roca'), arbol = mundo_lugar('arbol'), pinar = mundo_lugar('pinar'), claro = mundo_lugar('claro');
-  if (roca) for (const [dx, dy, r] of [[0, 0, 55], [-55, 32, 38], [50, 38, 34], [12, -58, 30]]) rocks.push({ x: roca.x + dx, y: roca.y + dy, r, seed: rnd() });
-  if (arbol) trees.push({ x: arbol.x, y: arbol.y, r: 30, canopy: 135, pine: false, shade: 0.3 });
+  const pinares = landmarks.filter(l => l.kind === 'pinar'), claros = landmarks.filter(l => l.kind === 'claro');
+  for (const roca of landmarks.filter(l => l.kind === 'roca'))
+    for (const [dx, dy, r] of [[0, 0, 55], [-55, 32, 38], [50, 38, 34], [12, -58, 30]]) rocks.push({ x: roca.x + dx, y: roca.y + dy, r, seed: rnd() });
+  for (const arbol of landmarks.filter(l => l.kind === 'arbol')) trees.push({ x: arbol.x, y: arbol.y, r: 30, canopy: 135, pine: false, shade: 0.3 });
 
   // Pista de cada bandera según el lugar conocido más cercano
   for (const f of flags) {
     let best = null, bd = Infinity;
     for (const l of landmarks) {
-      if (l.kind === 'camp') continue;
+      if (l.kind === 'camp' || l.kind === 'comedor') continue;
       let dd = pdist(f.x, f.y, l.x, l.y) - l.r;
       if (!mismo_lado(f, l)) dd += 100000; // mejor un lugar del mismo lado del río
       if (dd < bd) { bd = dd; best = l; }
@@ -438,43 +485,38 @@ function mundo_generar(semilla) {
     tents.push({ x: camp.x + Math.cos(a) * 150, y: camp.y + Math.sin(a) * 150, r: 34, ang: a, color, idx: i });
   });
 
-  // Árboles
-  for (let tries = 0; trees.length < 950 && tries < 6000; tries++) {
+  // Árboles (menos tupido que antes: el mapa es 4 veces más grande pero hay el doble de árboles)
+  const en_pinar = (x, y) => pinares.some(p => pdist(x, y, p.x, p.y) < p.r);
+  for (let tries = 0; trees.length < 1900 && tries < 15000; tries++) {
     const tx = rr(40, WORLD - 40), ty = rr(40, WORLD - 40);
-    const in_pinar = pinar && pdist(tx, ty, pinar.x, pinar.y) < pinar.r;
+    const in_pinar = en_pinar(tx, ty);
     const canopy = rr(38, 66);
     const pine = in_pinar ? true : rnd() < 0.45;   // si está en el pinar no se pide número
     const shade = in_pinar ? 0 : rnd();
-    if (mundo_libre(tx, ty, 30, blocked, 0) && mundo_libre(tx, ty, 0, trees, 34)) trees.push({ x: tx, y: ty, r: 14, canopy, pine, shade });
+    // en los pinares los árboles van más juntos
+    if (mundo_libre(tx, ty, 30, blocked, 0) && mundo_libre(tx, ty, 0, trees, in_pinar ? 34 : 60)) trees.push({ x: tx, y: ty, r: 14, canopy, pine, shade });
   }
   // Rocas
-  for (let tries = 0; rocks.length < 130 && tries < 3000; tries++) {
+  for (let tries = 0; rocks.length < 300 && tries < 6000; tries++) {
     const kx = rr(40, WORLD - 40), ky = rr(40, WORLD - 40), kr = rr(14, 32), ks = rnd();
     if (mundo_libre(kx, ky, kr, blocked, 10) && mundo_libre(kx, ky, kr, trees, 4)) rocks.push({ x: kx, y: ky, r: kr, seed: ks });
   }
-  // Arbustos con bayas
-  const all = [...blocked, ...trees, ...rocks];
-  for (let tries = 0; bushes.length < 170 && tries < 4000; tries++) {
-    const bx = rr(60, WORLD - 60), by = rr(60, WORLD - 60);
-    if (pdist(bx, by, camp.x, camp.y) < 350) continue;
-    if (mundo_libre(bx, by, 22, all, 10) && mundo_libre(bx, by, 22, bushes, 30)) bushes.push({ x: bx, y: by, r: 22, berries: 3, regrow: 0 });
-  }
-  for (let i = 0; i < 260; i++) mundo_poner_rama();
+  for (let i = 0; i < 560; i++) mundo_poner_rama();
 
   // Decoración del suelo (pasto, flores, hojas)
-  for (let i = 0; i < 3500; i++) {
+  for (let i = 0; i < 12000; i++) {
     const dx = rr(0, WORLD), dy = rr(0, WORLD), dk = Math.floor(rnd() * 4), da = rnd() * 6.28;
     decos.push({ x: dx, y: dy, k: dk, a: da });
   }
-  if (claro) for (let i = 0; i < 280; i++) {
+  for (const claro of claros) for (let i = 0; i < 280; i++) {
     const a = rnd() * 6.28, d = Math.sqrt(rnd()) * claro.r, da = rnd() * 6.28;
     decos.push({ x: claro.x + Math.cos(a) * d, y: claro.y + Math.sin(a) * d, k: 2, a: da });
   }
-  // nada de pasto encima del agua ni en el cerro
-  const lagos = [...lake_water, ...monte_zona()];
+  // nada de pasto encima del agua, en el cerro ni dentro del comedor
+  const lagos = [...lake_water, ...monte_zona(), ...comedor_zona()];
   decos = decos.filter(d => mundo_libre(d.x, d.y, 0, lagos, 0));
 
-  solids = [...trees, ...rocks, ...lake_water, ...tents, { x: camp.x, y: camp.y, r: 26 }];
+  solids = [...trees, ...rocks, ...lake_water, ...tents, { x: camp.x, y: camp.y, r: 26 }, ...comedor_postes()];
   mapa_construir();
 }
 
@@ -483,7 +525,7 @@ function mundo_poner_rama() {
   for (let tries = 0; tries < 50; tries++) {
     const sx = 60 + random(WORLD - 120), sy = 60 + random(WORLD - 120), sa = random(6.28);
     if (player && pdist(sx, sy, player.x, player.y) < 500) continue;
-    if (mundo_libre(sx, sy, 10, lake_water, 0) && mundo_libre(sx, sy, 10, monte_zona(), 0) && mundo_libre(sx, sy, 10, rocks, 0) && mundo_libre(sx, sy, 4, trees, 0)) {
+    if (mundo_libre(sx, sy, 10, lake_water, 0) && mundo_libre(sx, sy, 10, monte_zona(), 0) && mundo_libre(sx, sy, 10, comedor_zona(), 0) && mundo_libre(sx, sy, 10, rocks, 0) && mundo_libre(sx, sy, 4, trees, 0)) {
       sticks.push({ x: sx, y: sy, a: sa, r: 8 });
       return;
     }
