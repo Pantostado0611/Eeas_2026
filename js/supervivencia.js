@@ -101,7 +101,7 @@ function supervivencia_actualizar(dt, running) {
   // Energía (hambre + frío). Llena te dura unas 9 horas del juego en Tropa (en tiempo real depende de la modalidad).
   // Dentro del comedor no hace frío ni te mojas.
   const cold = !adentro && es_noche() && (fire.fuel <= 0 || dist(player, camp) > 320);
-  let drain = 100 / 9 * cat.energy * 24 / dia_len();
+  let drain = comiendo ? 0 : 100 / 9 * cat.energy * 24 / dia_len(); // sentado comiendo no se gasta
   if (running && player.moving) drain *= 1.8;
   if (cold) drain *= 1.6;
   if (rain && !adentro) drain *= 1.15;

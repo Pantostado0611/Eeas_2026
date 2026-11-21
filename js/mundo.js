@@ -16,6 +16,29 @@ function mundo_libre(x, y, r, lista, pad) {
 }
 const mundo_lugar = kind => landmarks.find(l => l.kind === kind);
 
+// Rejilla: para preguntar "¿hay algo aquí?" rápido sin revisar todos los círculos del mundo.
+// Cada círculo se guarda en las celdas que toca (agrandado por "extra" = lo más que se va a preguntar alrededor).
+// Da exactamente el mismo resultado que mundo_libre (solo es más rápido).
+function rejilla_nueva(lista, extra, celda = 160) {
+  const g = { celda, extra, m: new Map() };
+  for (const o of lista) rejilla_poner(g, o);
+  return g;
+}
+function rejilla_poner(g, o) {
+  const r = o.r + g.extra, c = g.celda;
+  for (let i = Math.floor((o.x - r) / c); i <= Math.floor((o.x + r) / c); i++)
+    for (let j = Math.floor((o.y - r) / c); j <= Math.floor((o.y + r) / c); j++) {
+      const k = i * 100000 + j, b = g.m.get(k);
+      if (b) b.push(o); else g.m.set(k, [o]);
+    }
+}
+// Como mundo_libre, pero con la rejilla (r + pad no debe pasar de g.extra)
+function rejilla_libre(g, x, y, r, pad) {
+  const b = g.m.get(Math.floor(x / g.celda) * 100000 + Math.floor(y / g.celda));
+  if (b) for (const o of b) if (pdist(o.x, o.y, x, y) < o.r + r + pad) return false;
+  return true;
+}
+
 // Forma del lago: varios círculos encimados ("lóbulos") dentro del círculo original del lago.
 // Usa su propio azar, así no cambia el orden del azar del mundo.
 function lago_forma(l, i, semilla, tipo) {
@@ -487,6 +510,7 @@ function mundo_generar(semilla) {
 
   // Árboles (menos tupido que antes: el mapa es 4 veces más grande pero hay el doble de árboles)
   const en_pinar = (x, y) => pinares.some(p => pdist(x, y, p.x, p.y) < p.r);
+  const g_blocked = rejilla_nueva(blocked, 42), g_trees = rejilla_nueva(trees, 60);
   for (let tries = 0; trees.length < 1900 && tries < 15000; tries++) {
     const tx = rr(40, WORLD - 40), ty = rr(40, WORLD - 40);
     const in_pinar = en_pinar(tx, ty);
@@ -494,12 +518,15 @@ function mundo_generar(semilla) {
     const pine = in_pinar ? true : rnd() < 0.45;   // si está en el pinar no se pide número
     const shade = in_pinar ? 0 : rnd();
     // en los pinares los árboles van más juntos
-    if (mundo_libre(tx, ty, 30, blocked, 0) && mundo_libre(tx, ty, 0, trees, in_pinar ? 34 : 60)) trees.push({ x: tx, y: ty, r: 14, canopy, pine, shade });
+    if (rejilla_libre(g_blocked, tx, ty, 30, 0) && rejilla_libre(g_trees, tx, ty, 0, in_pinar ? 34 : 60)) {
+      const t = { x: tx, y: ty, r: 14, canopy, pine, shade };
+      trees.push(t); rejilla_poner(g_trees, t);
+    }
   }
   // Rocas
   for (let tries = 0; rocks.length < 300 && tries < 6000; tries++) {
     const kx = rr(40, WORLD - 40), ky = rr(40, WORLD - 40), kr = rr(14, 32), ks = rnd();
-    if (mundo_libre(kx, ky, kr, blocked, 10) && mundo_libre(kx, ky, kr, trees, 4)) rocks.push({ x: kx, y: ky, r: kr, seed: ks });
+    if (rejilla_libre(g_blocked, kx, ky, kr, 10) && rejilla_libre(g_trees, kx, ky, kr, 4)) rocks.push({ x: kx, y: ky, r: kr, seed: ks });
   }
   for (let i = 0; i < 560; i++) mundo_poner_rama();
 
@@ -514,7 +541,8 @@ function mundo_generar(semilla) {
   }
   // nada de pasto encima del agua, en el cerro ni dentro del comedor
   const lagos = [...lake_water, ...monte_zona(), ...comedor_zona()];
-  decos = decos.filter(d => mundo_libre(d.x, d.y, 0, lagos, 0));
+  const g_lagos = rejilla_nueva(lagos, 0);
+  decos = decos.filter(d => rejilla_libre(g_lagos, d.x, d.y, 0, 0));
 
   solids = [...trees, ...rocks, ...lake_water, ...tents, { x: camp.x, y: camp.y, r: 26 }, ...comedor_postes()];
   mapa_construir();

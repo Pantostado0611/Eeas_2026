@@ -16,22 +16,24 @@ const SNACK_CADA = 3;    // horas del juego entre un snack y otro
 // Estado (se reinicia en comedor_reiniciar)
 let charola = 0;        // 0 sin charola, 1 vacía, 2 con comida, 3 con comida y agua, 4 sucia (ya comiste)
 let servido = null;     // lo que te sirvieron: { tipo: 'comida' | 'snack', i, raciones }
-let comidas_hechas = new Set(); // 'día-i': esa comida ya te la dieron
+let comidas_hechas = new Set(); // 'día-i': esa comida ya te la sirvieron
+let comidas_comidas = new Set(); // 'día-i': y ya te la comiste
 let snack_hora = -99;   // hora (contando los días) del último snack
 let comiendo = null;    // { t, dur }: sentado comiendo (el juego no te deja moverte)
 let comida_avisada = '', comedor_aviso_t = 0;
 let adentro = false;    // estás dentro del comedor (se dibuja el salón en vez del bosque)
 
 function comedor_reiniciar() {
-  charola = 0; servido = null; comidas_hechas = new Set(); snack_hora = -99; comiendo = null;
+  charola = 0; servido = null; comidas_hechas = new Set(); comidas_comidas = new Set(); snack_hora = -99; comiendo = null;
   comida_avisada = ''; comedor_aviso_t = 0; adentro = false;
 }
 
 // ---------- Horarios ----------
-const horas_abs = () => day * 24 + hora();
+const horas_abs = () => (day - 1) * 24 + time * 24; // horas desde que empezó la partida (siempre avanza)
 // Comida que se está sirviendo ahorita (índice) o -1
 function comida_actual() { const h = hora(); return COMIDAS.findIndex(c => h >= c.ini && h < c.fin); }
 const clave_comida = i => day + '-' + i;
+const dia_visible = () => day + (hora() < 6 ? 1 : 0); // el día del calendario (después de medianoche ya es el siguiente)
 const hora_txt = h => Math.floor(h) + ':' + dos(Math.round((h % 1) * 60));
 // "La comida es a las 13:30." (la que sigue)
 function siguiente_comida_texto() {
@@ -67,6 +69,7 @@ function comedor_crear() {
     [xk - 30, y0, xk + g, y1],                                                         // pared de la cocina (con su repisa)
     [x0, cy - 70, x0 + 30, cy + 70]);                                                  // chimenea
   for (const m of c.mesas) c.muros.push([m.x - m.hw, m.y - m.hd - 22, m.x + m.hw, m.y + m.hd + 22]); // mesa y bancas
+  for (let k = 0; k < 3; k++) { const mx = x0 + 110 + k * 190, my = y1 + 62; c.muros.push([mx - 45, my - 32, mx + 45, my + 32]); } // mesas del porche
   comedor_caras_crear();
 }
 const comedor_zona = () => comedor ? [{ x: comedor.x, y: comedor.y + comedor.porche / 2, r: comedor.radio + 20 }] : [];
@@ -77,7 +80,7 @@ function comedor_postes() {
   return res;
 }
 // ¿(x, y) está dentro del salón?
-const en_comedor = (x, y) => comedor && x > comedor.x0 + 4 && x < comedor.x1 - 4 && y > comedor.y0 + 4 && y < comedor.y1 - 4;
+const en_comedor = (x, y) => comedor && x > comedor.x0 && x < comedor.x1 && y > comedor.y0 && y < comedor.y1;
 // ¿El edificio tapa la línea de (x1, y1) a (x2, y2)? (para que el brillo de la fogata no se vea a través de él)
 function comedor_tapa(x1, y1, x2, y2) {
   if (!comedor) return false;
@@ -370,6 +373,7 @@ function comer_actualizar(dt) {
   if (comiendo.t < comiendo.dur) return;
   const ganado = (servido && servido.tipo === 'comida' ? ENERGIA_COMIDA : ENERGIA_SNACK) + (charola === 3 ? ENERGIA_AGUA : 0);
   energy = Math.min(100, energy + ganado);
+  if (servido && servido.tipo === 'comida') comidas_comidas.add(servido.clave);
   charola = 4; comiendo = null;
   toast('¡Qué rico! +energía. Ahora deja tu charola en Devolución.', 4);
 }
@@ -379,16 +383,19 @@ function comer_actualizar(dt) {
 function comedor_cerca() {
   if (!adentro) return null;
   const u = tecla_entre_corchetes('usar') + ' ';
-  for (const v of comedor.ventanillas) {
-    if (pdist(player.x, player.y, v.x, v.y) > 55) continue;
-    const textos = { charolas: 'Tomar una charola', comida: 'Pedir comida', agua: 'Pedir agua y raciones', devolucion: 'Dejar tu charola' };
-    return { kind: 'ventanilla', obj: v, label: u + textos[v.tipo] + ' (' + v.name + ')' };
-  }
+  // la ventanilla más cercana (a menos de 55) y, si traes comida, la mesa más cercana (a menos de 40): gana la más cerca
+  let vent = null, dv = 55, mesa = null, dm = 40;
+  for (const v of comedor.ventanillas) { const d = pdist(player.x, player.y, v.x, v.y); if (d < dv) { dv = d; vent = v; } }
   if (charola === 2 || charola === 3)
     for (const m of comedor.mesas) {
-      const dx = Math.max(0, Math.abs(player.x - m.x) - m.hw), dy = Math.max(0, Math.abs(player.y - m.y) - m.hd - 22);
-      if (Math.hypot(dx, dy) < 40) return { kind: 'mesa', obj: m, label: u + 'Sentarte a comer' };
+      const dx = Math.max(0, Math.abs(player.x - m.x) - m.hw), dy = Math.max(0, Math.abs(player.y - m.y) - m.hd - 22), d = Math.hypot(dx, dy);
+      if (d < dm) { dm = d; mesa = m; }
     }
+  if (mesa && (!vent || dm + 15 < dv)) return { kind: 'mesa', obj: mesa, label: u + 'Sentarte a comer' };
+  if (vent) {
+    const textos = { charolas: 'Tomar una charola', comida: 'Pedir comida', agua: 'Pedir agua y raciones', devolucion: 'Dejar tu charola' };
+    return { kind: 'ventanilla', obj: vent, label: u + textos[vent.tipo] + ' (' + vent.name + ')' };
+  }
   return null;
 }
 function comedor_usar(n) {
@@ -403,7 +410,7 @@ function comedor_usar(n) {
     if (charola >= 2) { toast('Ya tienes tu comida. Siéntate en una mesa.'); return; }
     const i = comida_actual();
     if (i >= 0 && !comidas_hechas.has(clave_comida(i))) {
-      comidas_hechas.add(clave_comida(i)); servido = { tipo: 'comida', i, raciones: false }; charola = 2;
+      comidas_hechas.add(clave_comida(i)); servido = { tipo: 'comida', i, raciones: false, clave: clave_comida(i) }; charola = 2;
       toast('Cocinero: ¡Buen provecho! Hoy hay ' + COMIDAS[i].menu + '.', 5);
     } else if (horas_abs() - snack_hora >= SNACK_CADA) {
       snack_hora = horas_abs(); servido = { tipo: 'snack' }; charola = 2;

@@ -84,7 +84,7 @@ function hud_dibujar() {
   const k = hud_k();
   rect_redondo(12 * k, 12 * k, 236 * k + (tactil ? 16 : 0), 122 * k, 12 * k, '#000', 0.35);
   const h = hora(), hh = Math.floor(h), mm = Math.floor((h - hh) * 60 / 10) * 10;
-  const txt = 'Día ' + day + ' · ' + dos(hh) + ':' + dos(mm);
+  const txt = 'Día ' + dia_visible() + ' · ' + dos(hh) + ':' + dos(mm);
   texto(24 * k, 38 * k, txt, fk(16, k), true, 'left', '#fff');
   const ix = 24 * k + texto_ancho(txt, fk(16, k), true) + 16 * k;
   if (es_noche()) icono_luna(ix, 32 * k, 18 * k); else icono_sol(ix, 32 * k, 18 * k);
@@ -453,19 +453,22 @@ function pasaporte_horarios(ax, ay, aw, ah, k) {
   const cafe = '#3a2a14', gris = '#6b5a3a', verde = '#2e8b3a', h = hora();
   const hh = Math.floor(h), mm = Math.floor((h - hh) * 60 / 10) * 10;
   texto(ax + aw / 2, ay + 22 * k, 'Horarios del comedor', 20 * k, true, 'center', cafe);
-  texto(ax + aw / 2, ay + 46 * k, 'Ahora: día ' + day + ', ' + hh + ':' + dos(mm) + ' · Modalidad ' + MODOS[settings.modo].name + ' (' + MODOS[settings.modo].desc.toLowerCase() + ')', 14 * k, false, 'center', gris);
+  texto(ax + aw / 2, ay + 46 * k, 'Ahora: día ' + dia_visible() + ', ' + hh + ':' + dos(mm) + ' · Modalidad ' + MODOS[settings.modo].name + ' (' + MODOS[settings.modo].desc.toLowerCase() + ')', 14 * k, false, 'center', gris);
   const actual = comida_actual();
   const fh = Math.min(74 * k, (ah - 170 * k) / 3);
   COMIDAS.forEach((c, i) => {
-    const y = ay + 62 * k + i * (fh + 8 * k), ya = comidas_hechas.has(clave_comida(i));
+    // de madrugada ya se ven las comidas del día que empieza (las del juego cambian a las 6:00)
+    const clave = (h < 6 ? day + 1 : day) + '-' + i;
+    const y = ay + 62 * k + i * (fh + 8 * k), ya = comidas_comidas.has(clave), servida = comidas_hechas.has(clave);
     const ahora_si = i === actual;
     rect_redondo(ax, y, aw, fh, 10 * k, ahora_si ? '#dcefd2' : '#ebe2c8', 1);
     texto(ax + 16 * k, y + fh * 0.42, c.name, 19 * k, true, 'left', cafe);
     texto(ax + 16 * k, y + fh * 0.78, hora_txt(c.ini) + ' a ' + hora_txt(c.fin) + ' · ' + c.menu, 14 * k, false, 'left', gris);
     let est, col;
     if (ya) { est = 'Ya comiste'; col = verde; }
+    else if (servida) { est = 'Te sirvieron: siéntate a comer'; col = '#b07a10'; }
     else if (ahora_si) { est = '¡Ahora! Ve al comedor'; col = '#c0392b'; }
-    else if (h >= c.fin) { est = 'Ya pasó'; col = '#9a8a6a'; }
+    else if (h >= c.fin && h >= 6) { est = 'Ya pasó'; col = '#9a8a6a'; }
     else { est = 'Más tarde'; col = gris; }
     texto(ax + aw - 16 * k, y + fh * 0.55, est, 15 * k, true, 'right', col);
   });

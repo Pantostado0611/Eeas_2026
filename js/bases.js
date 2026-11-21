@@ -15,7 +15,7 @@ const base_siguiente = () => flags.find(f => !f.done);               // primera 
 const base_sin_marcar = () => flags.find(f => !f.done && !f.mark);   // Rover: primera sin hacer y sin marcar
 const bases_hechas = () => flags.filter(f => f.done).length;
 // Lo que dice el sello de una base en el pasaporte
-function sello_nuevo(clave) { const h = hora(); return { clave, dia: day, hora: Math.floor(h) + ':' + dos(Math.floor((h % 1) * 6) * 10) }; }
+function sello_nuevo(clave) { const h = hora(); return { clave, dia: dia_visible(), hora: Math.floor(h) + ':' + dos(Math.floor((h % 1) * 6) * 10) }; }
 
 // ¿La línea recta de a a b va toda por tierra? (sin cruzar ríos ni lagos)
 function ruta_por_tierra(a, b) {
@@ -29,7 +29,7 @@ function pick_ref(f) {
   let c = [], todos = [];
   // pasadas: [distancia mínima, 2 = por tierra / 1 = mismo lado del río / 0 = cualquiera, distancia máxima]
   // (primero se buscan lugares a no más de 80 pasos de la base)
-  for (const [min, regla, max] of [[400, 2, PISTA_MAX], [120, 2, PISTA_MAX], [120, 1, PISTA_MAX], [400, 2, Infinity], [120, 1, Infinity], [400, 0, Infinity]]) {
+  for (const [min, regla, max] of [[250, 2, PISTA_MAX], [120, 2, PISTA_MAX], [120, 1, PISTA_MAX], [400, 2, Infinity], [120, 1, Infinity], [400, 0, Infinity]]) {
     if (todos.length) break;
     for (const l of landmarks) {
       let ok = REF_ROVER.includes(l.kind) && dist(l, f) > min && dist(l, f) <= max;
