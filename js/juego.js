@@ -200,10 +200,10 @@ function actualizar(dt) {
 function dibujar() {
   dibujar_mundo();
   if (state !== 'title' && state !== 'creditos') { rio_vista_dibujar(); monte_vista_dibujar(); }
+  if (state === 'play') comedor_vista_dibujar(); // la charola en tus manos (debajo de los mensajes)
   if (state === 'title') titulo_dibujar(); else if (state === 'creditos') creditos_dibujar(); else hud_dibujar();
   if (state === 'play') tactil_dibujar(); // botones del celular (no salen en el menú ni en las ventanitas)
   if (state === 'play' && canoa && canoa.manual) canoa_manual_dibujar();
-  if (state === 'play') comedor_vista_dibujar(); // la charola en tus manos
   if (state === 'play' && mapa_abierto) pasaporte_dibujar();
   if (state === 'play' && book) libreta_dibujar();
   if (state === 'play' && reto) reto_dibujar();

@@ -44,8 +44,8 @@ function barra(x, y, w, label, v, col, k = 1) {
 }
 // Tamaño de letra con la escala k, sin bajar de 10 píxeles (más chico ya no se lee en el celular)
 const fk = (px, k) => k === 1 ? px : Math.max(10, px * k);
-// Escala del HUD: 1 en la computadora; en el celular, más chico (pero no tanto que no se lea)
-const hud_k = () => tactil ? Math.max(0.75, tu() * 0.8) : 1;
+// Escala del HUD: en la computadora 1 (o menos si la ventana es chica); en el celular, más chico (pero no tanto que no se lea)
+const hud_k = () => tactil ? Math.max(0.75, tu() * 0.8) : clamp(Math.min(W / 1150, H / 700), 0.62, 1);
 
 // Recuadro oscuro con texto centrado (avisos y mensajes)
 function pastilla(x, y, text, px, alpha) {
@@ -55,7 +55,8 @@ function pastilla(x, y, text, px, alpha) {
   texto(x, y, text, px, true, 'center', '#fff', alpha);
 }
 // Mensaje que puede ocupar varios renglones (no más ancho que max_w), centrado en x; y es el primer renglón. Devuelve qué tan alto quedó.
-function pastilla_varias(x, y, text, px, alpha, max_w) {
+// Con dibujar = false solo mide.
+function pastilla_varias(x, y, text, px, alpha, max_w, dibujar = true) {
   const lines = []; let line = '';
   for (const w of text.split(' ')) {
     const t = line ? line + ' ' + w : w;
@@ -64,6 +65,7 @@ function pastilla_varias(x, y, text, px, alpha, max_w) {
   if (line) lines.push(line);
   const lh = px * 1.35;
   const w = Math.max(...lines.map(l => texto_ancho(l, px, true))) + px * 1.4, h = lines.length * lh + px * 0.6;
+  if (!dibujar) return h;
   rect_redondo(x - w / 2, y - lh * 0.8 - px * 0.3, w, h, px * 0.6, '#000', 0.6 * alpha);
   lines.forEach((l, i) => texto(x, y + i * lh, l, px, true, 'center', '#fff', alpha));
   return h;
@@ -100,18 +102,18 @@ function hud_dibujar() {
 
   // Insignia de la categoría (en el celular no: ya sabes cuál elegiste)
   if (!tactil) {
-    const badge = cat.name + ' · ' + cat.diff, bw = texto_ancho(badge, 13, true) + 34;
-    rect_redondo(12, 140, bw, 24, 12, '#000', 0.35);
-    blob(26, 152, 6, cat.color);
-    texto(38, 157, badge, 13, true, 'left', '#fff');
+    const badge = cat.name + ' · ' + cat.diff, bw = texto_ancho(badge, fk(13, k), true) + 34 * k;
+    rect_redondo(12 * k, 140 * k, bw, 24 * k, 12 * k, '#000', 0.35);
+    blob(26 * k, 152 * k, 6 * k, cat.color);
+    texto(38 * k, 157 * k, badge, fk(13, k), true, 'left', '#fff');
   }
   brujula_dibujar(k);
 
   if (state === 'play' && !reto && !prender && !canoa && !rescate && !rapel && !book && !mapa_abierto && !comiendo) {
     // Aviso de interacción
     const cerca = cerca_de_algo();
-    if (cerca) pastilla(W / 2, H * (tactil ? 0.64 : 0.68), cerca.label, tactil ? fk(15, k) : 15, 1);
-    if (!raton_capturado && !tactil) texto(W / 2, 30, 'Haz clic para mirar con el mouse', 14, true, 'center', '#fff', 0.85);
+    if (cerca) pastilla(W / 2, H * (tactil ? 0.64 : 0.68), cerca.label, fk(15, k), 1);
+    if (!raton_capturado && !tactil) texto(W / 2, 30 * k, 'Haz clic para mirar con el mouse', fk(14, k), true, 'center', '#fff', 0.85);
   }
 
   // Mensajes: en la computadora abajo; en el celular arriba en medio (abajo están los botones), en renglones cortos
@@ -121,17 +123,31 @@ function hud_dibujar() {
     let y = (canoa || rescate || rapel) ? 252 : H * 0.34;
     const px = fk(15, k);
     for (const t of toasts) y += pastilla_varias(W / 2, y, t.text, px, Math.min(1, t.t * 2), W * 0.5) + 6;
-  } else toasts.forEach((t, i) => pastilla(W / 2, H - 40 - (nt - 1 - i) * 36, t.text, 17, Math.min(1, t.t * 2)));
+  } else {
+    // abajo en medio, del más nuevo (abajo) al más viejo (arriba); si no caben en un renglón se parten
+    // si al lado del minimapa no cabe (ventana angosta), van arriba de él a todo lo ancho
+    const px = fk(17, k), angosta = W - 2 * (MAP * k + 40) < 300, max_w = angosta ? W - 24 : W - 2 * (MAP * k + 40);
+    let y = angosta ? H - MAP * k - 40 : H - 34 * k;
+    for (let i = nt - 1; i >= 0; i--) {
+      const t = toasts[i], h = pastilla_varias(W / 2, 0, t.text, px, 1, max_w, false);
+      y -= h - px * 1.35;
+      pastilla_varias(W / 2, y, t.text, px, Math.min(1, t.t * 2), max_w);
+      y -= px * 1.35 + 8;
+    }
+  }
 
   if (tactil) { if (ver_fps) texto(W - 12, H - 12, 'FPS ' + fps, 12, true, 'right', '#ff0'); return; }
 
   // Ayuda de controles (todas se pueden cambiar en el menú de Esc)
   const b = settings.binds, n = nombre_tecla;
-  texto(14, H - 12, n(b.adelante) + '/' + n(b.atras) + ': caminar · ' + n(b.izquierda) + '/' + n(b.derecha)
+  const ayuda = n(b.adelante) + '/' + n(b.atras) + ': caminar · ' + n(b.izquierda) + '/' + n(b.derecha)
     + ': girar · mouse: mirar · ' + n(b.correr) + ': correr · ' + n(b.usar) + ': usar · ' + n(b.comer) + ': ración · ' + n(b.mapa) + ': pasaporte'
     + (cat.hint === 'ruta' ? ' · ' + n(b.reto) + ': reto · ' + n(b.marcar) + ': marcar · ' + n(b.libreta) + ': libreta' : '')
-    + ' · Esc: menú', 12, false, 'left', '#fff', 0.7);
-  minimapa_dibujar();
+    + ' · Esc: menú';
+  let apx = fk(12, k);
+  while (apx > 9 && texto_ancho(ayuda, apx, false) > W - MAP * k - 50) apx -= 0.5;
+  if (texto_ancho(ayuda, apx, false) <= W - MAP * k - 50) texto(14, H - 12 * k, ayuda, apx, false, 'left', '#fff', 0.7);
+  minimapa_dibujar(k);
   if (ver_fps) texto(W - 12, H - 220, 'FPS ' + fps, 14, true, 'right', '#ff0');
 }
 
@@ -167,8 +183,8 @@ function brujula_dibujar(k = 1) {
   const bases = 'Bases: ' + bases_hechas() + '/' + NUM_FLAGS;
   if (tactil) {
     pistas.push(bases);
-    const px = fk(13, k), paso = px + 13, xr = cx - R - 14 * k;
-    let py = 12 * k + px + 4;
+    const parado = H > W, px = fk(13, k), paso = px + 13, xr = parado ? W - 12 : cx - R - 14 * k;
+    let py = parado ? cy + R + 12 * k + px : 12 * k + px + 4;
     for (const p of pistas) {
       const w = texto_ancho(p, px, true) + 16;
       rect_redondo(xr - w, py - px - 4, w, px + 10, 7, '#000', 0.55);
@@ -177,15 +193,15 @@ function brujula_dibujar(k = 1) {
     }
     return;
   }
-  let py = cy + R + 29;
-  for (const p of pistas) { pastilla_brujula(cx, py, p); py += 28; }
-  texto(cx, py - 1, bases, 13, true, 'center', '#fff');
+  let py = cy + R + 29 * k;
+  for (const p of pistas) { pastilla_brujula(cx, py, p, k); py += 28 * k; }
+  texto(cx, py - 1, bases, fk(13, k), true, 'center', '#fff');
 }
 // Pastilla centrada bajo la brújula, sin salirse por la derecha
-function pastilla_brujula(cx, y, text) {
-  const w = texto_ancho(text, 13, true) + 20, x = Math.min(cx - w / 2, W - 12 - w);
-  rect_redondo(x, y - 17, w, 24, 8, '#000', 0.55);
-  texto(x + w / 2, y, text, 13, true, 'center', '#fff');
+function pastilla_brujula(cx, y, text, k = 1) {
+  const px = fk(13, k), w = texto_ancho(text, px, true) + 20 * k, x = Math.min(cx - w / 2, W - 12 - w);
+  rect_redondo(x, y - 17 * k, w, 24 * k, 8 * k, '#000', 0.55);
+  texto(x + w / 2, y, text, px, true, 'center', '#fff');
 }
 
 // Nombre corto de una tecla para mostrarlo en pantalla
@@ -244,6 +260,7 @@ function dibujar_uniforme(x, y, k, col) {
 }
 function titulo_dibujar() {
   rect(0, 0, W, H, 'rgb(10,20,10)', 0.72);
+  if (H > W * 1.1) { titulo_parado_dibujar(); return; }
   const s = Math.min(1, W / 920, H / 620), ox = W / 2, oy = H / 2;
   titulo_hits = [];
   texto(ox, oy - 235 * s, 'Scouteando en Puebla', 46 * s, true, 'center', '#ffe9b0');
@@ -276,6 +293,42 @@ function titulo_dibujar() {
   texto(bx + 210 * s, oy + 202 * s, 'Empezar', 20 * s, true, 'center', '#1a1a1a');
   titulo_hits.push({ x: bx, y: by, w: 420 * s, h: 46 * s, cat: -1 });
   texto(ox, oy + 245 * s, tactil ? 'Toca una categoría y una modalidad, y luego Empezar' : 'A/D, flechas o 1-4: categoría · M: modalidad · ENTER: empezar', Math.max(11, 14 * s), false, 'center', '#fff', 0.7);
+}
+
+// La misma pantalla, acomodada para el celular parado: tarjetas de 2 en 2 y botones uno abajo del otro
+function titulo_parado_dibujar() {
+  const s = Math.min(1, W / 460, H / 940), ox = W / 2, oy = H / 2 - 15 * s;
+  titulo_hits = [];
+  texto(ox, oy - 385 * s, 'Scouteando en Puebla', 40 * s, true, 'center', '#ffe9b0');
+  texto(ox, oy - 352 * s, 'Explora el bosque, completa los retos de las 5 bases,', 15 * s, false, 'center', '#fff');
+  texto(ox, oy - 332 * s, 'mantén viva la fogata y no te pierdas las comidas.', 15 * s, false, 'center', '#fff');
+  texto(ox, oy - 298 * s, 'Elige tu categoría', 20 * s, true, 'center', '#ffe9b0');
+  CATEGORIES.forEach((c, i) => {
+    const sel = i === settings.cat, col = i % 2, row = Math.floor(i / 2);
+    const x = ox + (-215 + col * 220) * s, y = oy + (-280 + row * 280) * s, w = 210 * s, h = 268 * s, cx = x + w / 2;
+    if (sel) { rect_redondo(x, y, w, h, 14 * s, 'rgb(255,240,200)', 0.18); borde_redondo(x, y, w, h, 14 * s, c.color, 1, 4 * s); }
+    else { rect_redondo(x, y, w, h, 14 * s, '#000', 0.35); borde_redondo(x, y, w, h, 14 * s, '#fff', 0.15, 2 * s); }
+    dibujar_uniforme(cx, y + 62 * s, 1.1 * s, c.color);
+    texto(cx, y + 132 * s, c.name, 20 * s, true, 'center', '#fff');
+    texto(cx, y + 156 * s, c.diff, 15 * s, true, 'center', c.color);
+    c.desc.forEach((d, j) => texto(cx, y + (188 + j * 19) * s, d, 13 * s, false, 'center', '#fff', 0.8));
+    titulo_hits.push({ x, y, w, h, cat: i });
+  });
+  const by = oy + 292 * s;
+  MODOS.forEach((m, i) => {
+    const mx = ox + (-215 + i * 220) * s, sel = i === settings.modo, mw = 210 * s;
+    rect_redondo(mx, by, mw, 50 * s, 12 * s, sel ? '#ffe9b0' : '#000', sel ? 1 : 0.35);
+    if (!sel) borde_redondo(mx, by, mw, 50 * s, 12 * s, '#fff', 0.2, 2 * s);
+    texto(mx + mw / 2, by + 23 * s, m.name, 18 * s, true, 'center', sel ? '#1a1a1a' : '#fff');
+    texto(mx + mw / 2, by + 41 * s, m.desc, 13 * s, false, 'center', sel ? '#3a2a14' : '#fff', sel ? 1 : 0.7);
+    titulo_hits.push({ x: mx, y: by, w: mw, h: 50 * s, modo: i });
+  });
+  const bx = ox - 215 * s, by2 = by + 64 * s;
+  rect_redondo(bx, by2, 430 * s, 54 * s, 12 * s, cat.color, 1);
+  texto(ox, by2 + 35 * s, 'Empezar', 22 * s, true, 'center', '#1a1a1a');
+  titulo_hits.push({ x: bx, y: by2, w: 430 * s, h: 54 * s, cat: -1 });
+  texto(ox, by2 + 80 * s, 'Toca una categoría y una modalidad, y luego Empezar', Math.max(11, 14 * s), false, 'center', '#fff', 0.7);
+  texto(ox, by2 + 102 * s, 'Para jugar, gira el celular', Math.max(11, 14 * s), true, 'center', '#ffe9b0', 0.85);
 }
 
 // ---------- Mapa del bosque ----------
@@ -328,17 +381,24 @@ function mapa_construir() {
 function mapa_dibujar_en(x0, y0, size) {
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(mapa_cv, x0, y0, size, size);
-  const k = size / WORLD, px = Math.round(size / 42);
-  for (const l of landmarks) {
-    const x = clamp(x0 + l.x * k, x0 + 70, x0 + size - 70);
-    const y = Math.max(y0 + 18, y0 + l.y * k - (l.kind === 'pinar' ? 0 : l.r * k + 8));
-    texto_borde(x, y, l.name, px, '#3a2a14', 'rgb(255,250,235)');
-  }
-  // nombres de los ríos (en azul, encima del agua)
-  for (const r of rios) {
-    const x = clamp(x0 + r.etq[0] * k, x0 + 70, x0 + size - 70), y = clamp(y0 + r.etq[1] * k, y0 + 18, y0 + size - 10);
-    texto_borde(x, y, r.name, px, '#173f63', 'rgb(255,250,235)');
-  }
+  const k = size / WORLD, px = Math.max(9, Math.round(size / 42)), puestos = [];
+  // Cada nombre se prueba arriba de su lugar, abajo, a la derecha y a la izquierda: va en el primero donde no choque
+  const poner = (x, y, r, nombre, col) => {
+    const w = texto_ancho(nombre, px, true) + 6, h = px + 4;
+    const opciones = [[x, y - r - 6], [x, y + r + px + 4], [x + r + w / 2 + 4, y + px * 0.35], [x - r - w / 2 - 4, y + px * 0.35], [x, y - r - 6 - h], [x, y + r + px + 4 + h]];
+    for (const [ox, oy] of opciones) {
+      const cx = clamp(ox, x0 + w / 2 + 2, x0 + size - w / 2 - 2), cy = clamp(oy, y0 + px + 2, y0 + size - 4);
+      const caja = [cx - w / 2, cy - px, cx + w / 2, cy + 4];
+      if (puestos.some(b => caja[0] < b[2] && caja[2] > b[0] && caja[1] < b[3] && caja[3] > b[1])) continue;
+      puestos.push(caja);
+      texto_borde(cx, cy, nombre, px, col, 'rgb(255,250,235)');
+      return;
+    }
+  };
+  // primero los ríos (azul), luego campamento y comedor, luego lo demás
+  for (const r of rios) poner(x0 + r.etq[0] * k, y0 + r.etq[1] * k, 0, r.name, '#173f63');
+  const orden = [...landmarks].sort((a, b) => (b.kind === 'camp' || b.kind === 'comedor') - (a.kind === 'camp' || a.kind === 'comedor'));
+  for (const l of orden) poner(x0 + l.x * k, y0 + l.y * k, l.kind === 'pinar' ? 0 : l.r * k, l.name, '#3a2a14');
 }
 // Una punta de la rosa de los vientos: mitad clara y mitad oscura
 function rosa_punta(cx, cy, ang, len, w, claro, oscuro) {
@@ -360,15 +420,18 @@ function rosa_vientos(cx, cy, r, letras) {
   }
 }
 // Minimapa (abajo a la derecha). Con M o con un clic se hace grande.
-const mini_x = () => W - MAP - 18, mini_y = () => H - MAP - 18;
-const raton_en_minimapa = () => raton.x >= mini_x() && raton.x <= mini_x() + MAP && raton.y >= mini_y() && raton.y <= mini_y() + MAP;
-function minimapa_dibujar() {
-  const x0 = mini_x(), y0 = mini_y();
-  rect_redondo(x0 - 6, y0 - 6, MAP + 12, MAP + 12, 10, '#d8cfb4', 1);
-  ctx.drawImage(mapa_mini, x0, y0);
-  rosa_vientos(x0 + 20, y0 + 20, 15, false);
-  rect_redondo(x0 + MAP / 2 - 52, y0 + MAP - 22, 104, 18, 6, '#000', 0.6);
-  texto(x0 + MAP / 2, y0 + MAP - 9, '[' + nombre_tecla(settings.binds.mapa) + '] pasaporte', 11, true, 'center', '#fff');
+const mini_t = () => Math.round(MAP * hud_k()); // tamaño en pantalla (se achica en ventanas chicas)
+const mini_x = () => W - mini_t() - 18, mini_y = () => H - mini_t() - 18;
+const raton_en_minimapa = () => raton.x >= mini_x() && raton.x <= mini_x() + mini_t() && raton.y >= mini_y() && raton.y <= mini_y() + mini_t();
+function minimapa_dibujar(k = 1) {
+  const x0 = mini_x(), y0 = mini_y(), t = mini_t();
+  rect_redondo(x0 - 6, y0 - 6, t + 12, t + 12, 10, '#d8cfb4', 1);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(mapa_mini, x0, y0, t, t);
+  rosa_vientos(x0 + 20 * k, y0 + 20 * k, 15 * k, false);
+  const lbl = '[' + nombre_tecla(settings.binds.mapa) + '] pasaporte', px = fk(11, k), lw = texto_ancho(lbl, px, true) + 14;
+  rect_redondo(x0 + t / 2 - lw / 2, y0 + t - 22 * k, lw, 18 * k, 6, '#000', 0.6);
+  texto(x0 + t / 2, y0 + t - 9 * k, lbl, px, true, 'center', '#fff');
 }
 // ---------- Pasaporte (con M): Mapa, Sellos de las bases y Horarios del comedor ----------
 // Como el pasaporte de los camporees. El juego se pausa mientras lo ves.

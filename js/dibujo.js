@@ -105,6 +105,7 @@ function dibujar_mundo() {
   FOC = (W / 2) / Math.tan(FOV / 2);
   cam_cs = Math.cos(player.ang); cam_sn = Math.sin(player.ang);
   ojo = EYE + player.alt; // en la montaña o en rapel vas más alto
+  comedor_brillos = [];
   if (adentro) { comedor_interior_dibujar(); return; } // dentro del comedor no se ve el bosque
   const sky = colores_cielo();
 
@@ -198,8 +199,9 @@ function dibujar_mundo() {
   }
   ctx.globalAlpha = 1;
 
-  // Noche: todo se pone azul (sin oscurecer); la fogata brilla naranja
+  // Noche: todo se pone azul (sin oscurecer); la fogata brilla naranja y las ventanas del comedor se ven iluminadas
   if (sky.n > 0) rect(0, 0, W, H, 'rgb(35,65,170)', 0.32 * sky.n);
+  comedor_brillos_dibujar(sky.n);
   const dx = camp.x - player.x, dy = camp.y - player.y, fz = dx * cam_cs + dy * cam_sn;
   if (fire.fuel > 0 && fz > 10 && fz < FAR && !comedor_tapa(player.x, player.y, camp.x, camp.y)) {
     const sc = FOC / fz, x = W / 2 + (-dx * cam_sn + dy * cam_cs) * sc, y = HOR + ojo * sc - 20 * sc;

@@ -133,8 +133,23 @@ function flor_de_lis_x(l, x, yc, hc, k, col, nx, s) {
   pintado_x(l, x, yc, hc, f([-4, -12, 4, -12, 3, -26, -3, -26]), col, nx, s);           // pie
 }
 
+// Ventanas iluminadas que se vieron en este cuadro (de noche): se pintan otra vez encima del azul de la noche
+let comedor_brillos = [];
+function comedor_brillos_dibujar(n) {
+  if (!comedor_brillos.length) return;
+  ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,185,80,${0.55 * n})`; ctx.beginPath();
+  for (const q of comedor_brillos) {
+    if (q.length < 6) continue;
+    ctx.moveTo(q[0], q[1]);
+    for (let i = 2; i < q.length; i += 2) ctx.lineTo(q[i], q[i + 1]);
+    ctx.closePath();
+  }
+  ctx.fill(); ctx.globalCompositeOperation = 'source-over';
+  comedor_brillos = [];
+}
+
 // Colores que cambian con la hora (vidrios de día y de noche)
-const vidrio_fuera = () => es_noche() ? hex_rgb('#f3d58a') : hex_rgb('#2d4a5e');   // de noche se ve la luz de adentro
+const vidrio_fuera = () => es_noche() ? hex_rgb('#ffdc8a') : hex_rgb('#2d4a5e');   // de noche se ve la luz de adentro
 const vidrio_dentro = () => es_noche() ? hex_rgb('#1f2b55') : hex_rgb('#a9cfe6');  // de adentro se ve el cielo
 const puerta_dentro = () => es_noche() ? hex_rgb('#24345e') : hex_rgb('#cfe6c0');  // por la puerta se ve afuera
 
@@ -173,7 +188,8 @@ function lineas_triangulo(l, x, yc, D2, alto, techo, paso, col) {
 // Ventana con marco, vidrio y su cruz
 function ventana(l, eje, pos, ua, ub, ha, hb, vidrio, marco) {
   cara(l, rect3(eje, pos, ua - 3, ub + 3, ha - 3, hb + 3), marco, null);
-  cara(l, rect3(eje, pos, ua, ub, ha, hb), vidrio, null);
+  const v = cara(l, rect3(eje, pos, ua, ub, ha, hb), vidrio, null);
+  if (vidrio === vidrio_fuera) v.brilla = true;
   const um = (ua + ub) / 2, hm = ha + (hb - ha) * 0.55;
   multi(l, [rect3(eje, pos, um - 1.2, um + 1.2, ha, hb), rect3(eje, pos, ua, ub, hm - 1.2, hm + 1.2)], marco);
 }
@@ -467,7 +483,11 @@ function proyectar_poli(p3) {
 function cara_dibujar(it) {
   const pintar = c => {
     const col = con_niebla(typeof c.col === 'function' ? c.col() : c.col, it.z);
-    if (!c.multi) { poligono3(c.p, col); return; }
+    if (!c.multi) {
+      poligono3(c.p, col);
+      if (c.brilla && es_noche()) comedor_brillos.push(proyectar_poli(c.p)); // de noche se iluminan
+      return;
+    }
     ctx.fillStyle = col; ctx.beginPath();
     for (const p of c.multi) {
       const q = proyectar_poli(p);
@@ -551,7 +571,7 @@ function comedor_interior_dibujar() {
 // La charola en tus manos y lo de comer (encima de todo, como el chaleco)
 function comedor_vista_dibujar() {
   if (charola > 0 && !comiendo) {
-    const w = Math.min(W * 0.5, 420), x = W / 2 - w / 2, y = H - w * 0.22;
+    const w = tactil ? Math.min(W * 0.32, 300) : Math.min(W * 0.5, 420), mx = tactil ? W * 0.42 : W / 2, x = mx - w / 2, y = H - w * 0.22;
     poligono([x, H + 10, x + w, H + 10, x + w * 0.92, y, x + w * 0.08, y], '#8e9499');
     poligono([x + w * 0.05, H + 10, x + w * 0.95, H + 10, x + w * 0.88, y + 8, x + w * 0.12, y + 8], '#a9aeb3');
     if (charola === 2 || charola === 3) {

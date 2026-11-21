@@ -211,7 +211,7 @@ function tactil_dibujar() {
     pastilla(W * 0.25, H - 20, 'Toca aquí: giras a la izquierda', px, 0.8);
     pastilla(W * 0.75, H - 20, 'Toca aquí: giras a la derecha', px, 0.8);
   }
-  if (H > W && ((state === 'play' && modo !== '') || state === 'title')) pastilla(W / 2, H * 0.55, 'Gira el celular para jugar mejor', 13, 1);
+  if (H > W && state === 'play' && modo !== '') pastilla(W / 2, H * 0.55, 'Gira el celular para jugar mejor', 13, 1);
 }
 
 // ---------- Editor de botones (desde el menú de pausa) ----------
