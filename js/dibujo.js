@@ -277,6 +277,12 @@ function rio_suelo_dibujar() {
     if (!usada) canoa_suelo(m.cx + m.ox * (m.w - 30) + m.tx * 58, m.cy + m.oy * (m.w - 30) + m.ty * 58, m.ox, m.oy, '#b5462e');
   }
   for (let i = 0; i < rios.length; i++) { const s = seguridad_pos(i); canoa_suelo(s.x, s.y, s.ax, s.ay, '#e8692a'); }
+  if (canoa && !canoa.manual) { // aro naranja donde llegas
+    const a = canoa.desde.otro.agua, w = [];
+    for (let i = 0; i < 24; i++) { const t = i / 24 * PI * 2; w.push(a.x + Math.cos(t) * 70, a.y + Math.sin(t) * 70); }
+    for (let i = 24; i >= 0; i--) { const t = i / 24 * PI * 2; w.push(a.x + Math.cos(t) * 56, a.y + Math.sin(t) * 56); }
+    suelo_poligono(w, '#f08a2a', 0.8);
+  }
 }
 // Chalecos colgados y la persona de la canoa de seguridad (dibujos parados)
 function rio_visibles() {

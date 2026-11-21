@@ -77,7 +77,8 @@ function target() {
 // ---------- Claves scout ----------
 const RETO_WORDS = ['FOGATA', 'BRUJULA', 'TIENDA', 'MOCHILA', 'LINTERNA', 'BOSQUE', 'NUDO', 'PATRULLA', 'MAPA', 'LAGO',
   'ARBOL', 'ESTRELLA', 'LUNA', 'AGUILA', 'LOBO', 'SCOUT', 'TROPA', 'MANADA', 'RUTA', 'HUELLA', 'CUERDA', 'NORTE',
-  'FUEGO', 'AVENTURA', 'CAMPAMENTO', 'SIEMPRE LISTOS', 'BUENA ACCION', 'RIO', 'SOL', 'CANTIMPLORA'];
+  'FUEGO', 'AVENTURA', 'CAMPAMENTO', 'SIEMPRE LISTOS', 'BUENA ACCION', 'RIO', 'SOL', 'CANTIMPLORA',
+  'BUEN CAMINO', 'LUNA LLENA', 'NUDO MARINO', 'ESTRELLA POLAR', 'FUEGO VIVO'];
 const MORSE = { A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.', H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--',
   N: '-.', O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-', V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..' };
 const CENIT = { C: 'P', P: 'C', E: 'O', O: 'E', N: 'L', L: 'N', I: 'A', A: 'I', T: 'R', R: 'T' };
@@ -123,7 +124,10 @@ function nuevo_reto(f) {
   c.shown = c.form === 'des' ? enc : c.word;
   c.answer = c.form === 'des' ? c.word : enc;
   if (reto_con_opciones()) {
-    const otras = mezclar(RETO_WORDS.filter(w => w !== c.word && cifrar(c.key, w) !== enc && (!opciones_largas(c) || w.length <= 6)));
+    const pal = w => w.split(' ').length;
+    const parecido = w => (pal(w) === pal(c.word) ? 0 : 10) + Math.abs(w.length - c.word.length) + (w[0] === c.word[0] ? 0 : 1.5) + Math.random() * 2;
+    const otras = RETO_WORDS.filter(w => w !== c.word && cifrar(c.key, w) !== enc && (!opciones_largas(c) || w.length <= 6))
+      .map(w => [w, parecido(w)]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
     c.options = mezclar([c.word, otras[0], otras[1], otras[2]]).map(o => c.form !== 'des' ? cifrar(c.key, o) : o);
   }
   return c;

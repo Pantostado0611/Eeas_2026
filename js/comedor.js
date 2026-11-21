@@ -20,12 +20,12 @@ let comidas_hechas = new Set(); // 'día-i': esa comida ya te la sirvieron
 let comidas_comidas = new Set(); // 'día-i': y ya te la comiste
 let snack_hora = -99;   // hora (contando los días) del último snack
 let comiendo = null;    // { t, dur }: sentado comiendo (el juego no te deja moverte)
-let comida_avisada = '', comedor_aviso_t = 0;
+let comida_avisada = '', comedor_aviso_t = -1e9;
 let adentro = false;    // estás dentro del comedor (se dibuja el salón en vez del bosque)
 
 function comedor_reiniciar() {
   charola = 0; servido = null; comidas_hechas = new Set(); comidas_comidas = new Set(); snack_hora = -99; comiendo = null;
-  comida_avisada = ''; comedor_aviso_t = 0; adentro = false;
+  comida_avisada = ''; comedor_aviso_t = -1e9; adentro = false;
 }
 
 // ---------- Horarios ----------
@@ -57,7 +57,7 @@ function comedor_crear() {
   [['devolucion', 'Devolución', -150], ['charolas', 'Charolas', -70], ['comida', 'Comida', 10], ['agua', 'Agua y raciones', 90]]
     .forEach(([tipo, name, v], i) => c.ventanillas.push({ tipo, name, y: cy + v, x: xk - 60, idx: i }));
   // Mesas largas con bancas (2 filas de 2)
-  for (const mv of [-40, 100]) for (const mu of [-150, 40]) c.mesas.push({ x: cx + mu, y: cy + mv, hw: 65, hd: 20 });
+  for (const mv of [-60, 110]) for (const mu of [-160, 50]) c.mesas.push({ x: cx + mu, y: cy + mv, hw: 65, hd: 20 });
   // Mecedoras frente a la chimenea y lámparas colgando
   c.mecedoras = [{ x: x0 + 45, y: cy - 55 }, { x: x0 + 45, y: cy + 55 }];
   for (const mu of [-190, -40, 110]) for (const mv of [-90, 80]) c.lamparas.push({ x: cx + mu, y: cy + mv });
@@ -300,9 +300,18 @@ function comedor_caras_crear() {
     pared_x(dk.hijos, xk - 1, v.y - 28, v.y + 28, 44, 96, '#f5ebc8', -1);                    // hueco (cocina iluminada)
     pared_x(dk.hijos, xk - 1.5, v.y - 30, v.y + 30, 102, 114, colores[v.idx], -1);           // letrero de color
     if (v.tipo !== 'devolucion') {
-      pintado_x(dk.hijos, xk - 2, v.y, 0, [-14, 44, 14, 44, 14, 74, -14, 74], '#ffffff', -1);        // filipina blanca
+      pintado_x(dk.hijos, xk - 2, v.y, 0, [-14, 44, 14, 44, 14, 72, 7, 76, -7, 76, -14, 72], '#f4f4f4', -1); // filipina blanca
+      pintado_x(dk.hijos, xk - 2.2, v.y, 0, [-9, 44, 9, 44, 9, 66, -9, 66], '#d8dde2', -1);          // mandil
+      pintado_x(dk.hijos, xk - 2.2, v.y, 0, [-20, 52, -14, 50, -14, 70, -20, 66], '#e8e8e8', -1);    // brazos
+      pintado_x(dk.hijos, xk - 2.2, v.y, 0, [14, 50, 20, 52, 20, 66, 14, 70], '#e8e8e8', -1);
+      pintado_x(dk.hijos, xk - 2.2, v.y, 0, [-22, 50, -17, 50, -17, 55, -22, 55], '#d9a77a', -1);    // manos
+      pintado_x(dk.hijos, xk - 2.2, v.y, 0, [17, 50, 22, 50, 22, 55, 17, 55], '#d9a77a', -1);
       pintado_x(dk.hijos, xk - 2, v.y, 84, [-8, -4, -6, 6, 0, 9, 6, 6, 8, -4, 4, -9, -4, -9], '#d9a77a', -1); // cara
-      pintado_x(dk.hijos, xk - 2.5, v.y, 0, [-9, 90, 9, 90, 8, 100, -8, 100], '#ffffff', -1);        // gorro
+      pintado_x(dk.hijos, xk - 2.3, v.y, 84, [-4.5, 1, -2.5, 1, -2.5, 3.5, -4.5, 3.5], '#2a1f16', -1); // ojos
+      pintado_x(dk.hijos, xk - 2.3, v.y, 84, [2.5, 1, 4.5, 1, 4.5, 3.5, 2.5, 3.5], '#2a1f16', -1);
+      pintado_x(dk.hijos, xk - 2.3, v.y, 84, [-3.5, -4, 3.5, -4, 2, -6, -2, -6], '#a0463a', -1);     // sonrisa
+      pintado_x(dk.hijos, xk - 2.5, v.y, 0, [-8, 91, 8, 91, 8, 96, -8, 96], '#ffffff', -1);          // gorro
+      pintado_x(dk.hijos, xk - 2.5, v.y, 0, [-11, 96, 11, 96, 12, 103, 6, 107, -6, 107, -12, 103], '#ffffff', -1);
     } else for (let k = 0; k < 4; k++) pintado_x(dk.hijos, xk - 2, v.y, 46 + k * 4, [-16, 0, 16, 0, 16, 3, -16, 3], '#8e9499', -1); // charolas apiladas
   }
   // techo inclinado de madera con plafones blancos y vigas verdes de lado a lado
@@ -358,7 +367,7 @@ function empujar_rect(r, PR) {
 function comedor_chocar(PR) {
   if (!comedor || pdist(player.x, player.y, comedor.x, comedor.y) > comedor.radio + 60) return;
   const c = comedor, estaba = adentro;
-  for (const r of c.muros) empujar_rect(r, PR);
+  c.muros.forEach((r, i) => empujar_rect(r, i < 6 ? PR + 10 : PR)); // los primeros 6 son paredes
   // con charola no se sale: regla del comedor
   if (estaba && charola > 0 && player.y < c.y0 + PR + 4) {
     player.y = c.y0 + PR + 4;
@@ -400,7 +409,7 @@ function comedor_cerca() {
   if (!adentro) return null;
   const u = tecla_entre_corchetes('usar') + ' ';
   // la ventanilla más cercana (a menos de 55) y, si traes comida, la mesa más cercana (a menos de 40): gana la más cerca
-  let vent = null, dv = 55, mesa = null, dm = 40;
+  let vent = null, dv = 55, mesa = null, dm = 60;
   for (const v of comedor.ventanillas) { const d = pdist(player.x, player.y, v.x, v.y); if (d < dv) { dv = d; vent = v; } }
   if (charola === 2 || charola === 3)
     for (const m of comedor.mesas) {
@@ -557,7 +566,7 @@ function comedor_interior_dibujar() {
   for (const m of c.mecedoras) dib(m.x, m.y, sprs.mecedora, 44, 58);
   for (const l of c.lamparas) dib(l.x, l.y, sprs.lampara, 22, 60, 112);
   dib(c.x0 + 40, c.y + 92, sprs.estandarte, 46, 130);
-  for (const v of c.ventanillas) dib(c.xk - 6, v.y, sprs.letreros[v.idx], 64, 15, 98);
+  for (const v of c.ventanillas) { dib(c.xk - 6, v.y, sprs.letreros[v.idx], 64, 15, 98); dib(c.xk - 22, v.y, sprs.letreros[v.idx], 44, 10, 43); }
   cosas.sort((a, b) => b.d - a.d);
   for (const it of cosas) {
     if (it.c) { cara_dibujar(it); continue; }

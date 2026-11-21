@@ -33,7 +33,8 @@ function cerca_de_algo() {
   const m = muelle_cerca();
   if (m) {
     const dr = dist(player, m.rack), da = dist(player, m.abordar);
-    if (dr < 70 && dr <= da) return { kind: 'chaleco', obj: m, label: u + (chaleco ? 'Dejar el chaleco' : 'Ponerte el chaleco salvavidas') };
+    if (!chaleco && dr < 95) return { kind: 'chaleco', obj: m, label: u + 'Ponerte el chaleco salvavidas' };
+    if (chaleco && dr < 70 && dr <= da) return { kind: 'chaleco', obj: m, label: u + 'Dejar el chaleco' };
     if (da < 75) return { kind: 'canoa', obj: m, label: u + 'Subirte a la canoa' };
   }
   return null;
@@ -84,15 +85,16 @@ function supervivencia_actualizar(dt, running) {
     if (wood < WOOD_MAX && dist(player, sticks[i]) < 26) {
       sticks.splice(i, 1); wood++; mundo_poner_rama();
       if (wood === WOOD_MAX) toast('Ya llevas toda la leña que puedes cargar (8).');
+      else toast('+1 rama (' + wood + '/' + WOOD_MAX + ')', 1.5);
     }
   }
 
   // Fogata: si se apaga, se acaba el juego
   if (fire.lit) {
     const antes = fire.fuel;
-    // Recién prendida (70) dura 7:00 sin lluvia y 5:30 con lluvia en Tropa (el doble que en el mapa chico, ESC);
+    // Recién prendida (70) dura 5:15 sin lluvia y unos 4:10 con lluvia en Tropa (1.5 veces lo del mapa chico);
     // las demás categorías por fire_dur
-    fire.fuel -= dt * (rain ? 70 / 165 : 70 / 210) / cat.fire_dur / ESC;
+    fire.fuel -= dt * (rain ? 70 / 165 : 70 / 210) / cat.fire_dur / 1.5;
     if (antes > 25 && fire.fuel <= 25) toast('¡La fogata se está apagando! Échale leña.', 4);
     if (antes > 10 && fire.fuel <= 10) toast('¡Ya casi se apaga la fogata! Corre con leña.', 4);
     if (fire.fuel <= 0) { fire.fuel = 0; lose_reason = 'fogata'; state = 'lose'; return; }
@@ -326,7 +328,7 @@ function rio_actualizar(dt) {
   // llegar al muelle de enfrente (o regresar al mismo)
   for (const m of muelles) {
     if (m === c.desde && c.t < 3) continue;
-    if (dist(c, m.agua) < 60) { canoa_bajar(m); return; }
+    if (dist(c, m.agua) < 110 || dist(c, m.abordar) < 95) { canoa_bajar(m); return; }
   }
 }
 function rescate_actualizar(dt) {
@@ -385,7 +387,13 @@ function rio_vista_dibujar() {
     // equilibrio y ayuda
     const bw = 260, bx0 = W / 2 - bw / 2;
     barra(bx0, 150, bw, 'Equilibrio', (1 - c.bal) * 100, c.bal > 0.6 ? '#d9432f' : '#3fae4a');
-    pastilla(W / 2, 112, 'Rema hasta el ' + c.desde.otro.name, 17, 1);
+    const meta = c.desde.otro.agua, pasos = Math.round(pdist(c.x, c.y, meta.x, meta.y) / STEP);
+    pastilla(W / 2, 112, 'Rema hasta el ' + c.desde.otro.name + ' · ' + pasos + ' pasos', 17, 1);
+    // flecha: hacia dónde queda el muelle (arriba = al frente)
+    const fa = Math.atan2(meta.y - c.y, meta.x - c.x) - c.ang, fx = W / 2, fy = 62, fr = 22;
+    ctx.save(); ctx.translate(fx, fy); ctx.rotate(fa + PI / 2);
+    poligono([0, -fr, fr * 0.7, fr * 0.5, 0, fr * 0.15, -fr * 0.7, fr * 0.5], '#e8692a');
+    ctx.restore();
     if (!tactil) texto(W / 2, 196, 'Clic izquierdo: remo derecho (giras a la izquierda) · Clic derecho: remo izquierdo (giras a la derecha)', 14, true, 'center', '#fff', 0.95);
     texto(W / 2, tactil ? 196 : 216, 'Alterna para ir derecho. Muchas veces del mismo lado = la canoa se tambalea.', 13, false, 'center', '#fff', 0.85);
   } else if (rescate) {

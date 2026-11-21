@@ -194,11 +194,11 @@ function rios_crear() {
   // La Laguna Azul desemboca en él. Las Bases 1 y 2 quedan del otro lado.
   rios.push(rio_crear(0, 'Río Azul',
     [[1150, -150], [1200, 450], [1380, 880], [1800, 930], [2235, 620], [2500, 1100], [2900, 1380], [3350, 1420], [3700, 1560], [4150, 1700]],
-    190, [[[3376, 717], [3365, 1050], [3350, 1420]]], [1895, 873], ['Muelle Sur', 'Muelle Norte'], 0.78));
+    190, [[[3376, 717], [3365, 1050], [3350, 1420]]], [1895, 873], ['Muelle de las Garzas', 'Muelle de los Sauces'], 0.78));
   // Esquina de abajo a la izquierda: del oeste al sur. El Lago de las Ranas desemboca en él. La Base 4 queda del otro lado.
   rios.push(rio_crear(1, 'Río de las Ranas',
     [[-150, 2550], [400, 2680], [950, 2720], [1500, 2800], [2000, 3000], [2400, 3450], [2650, 4150]],
-    180, [[[311, 3251], [330, 2950], [400, 2680]]], [1750, 2900], ['Muelle Oriente', 'Muelle Poniente'], 0.25));
+    180, [[[311, 3251], [330, 2950], [400, 2680]]], [1750, 2900], ['Muelle del Pescador', 'Muelle de los Juncos'], 0.25));
   for (const r of rios) lake_water.push(...r.circ);
 }
 
