@@ -29,9 +29,11 @@ function imagenes_cargar(nombres) {
   })));
 }
 // Sprite a partir de un dibujo a mano (espejo = volteado); pixel = que de cerca no se vea borroso
-function sprite_imagen(im, espejo = false) {
+// filtro: para variar el color (ej. 'brightness(0.85)')
+function sprite_imagen(im, espejo = false, filtro = '') {
   const s = sprite_pintado(im.width, im.height, (g, w, h) => {
     g.imageSmoothingEnabled = false;
+    if (filtro) g.filter = filtro;
     if (espejo) { g.translate(w, 0); g.scale(-1, 1); }
     g.drawImage(im, 0, 0);
   });
@@ -150,6 +152,8 @@ const sprs = {};
 let ridge = [], stars = [];
 function sprites_crear() {
   sprs.oak = [0, 1, 2].map(i => sprite_pintado(150, 230, (g, w, h) => pintar_roble(g, w, h, 95 + i * 12, 26 + i * 5)));
+  // árbol dibujado a mano: 3 variantes (más oscuro, normal y volteado un poco más claro) para que no se vean todos iguales
+  if (IMGS.arbol) sprs.arbol = [sprite_imagen(IMGS.arbol, false, 'brightness(0.82) hue-rotate(-10deg)'), sprite_imagen(IMGS.arbol), sprite_imagen(IMGS.arbol, true, 'brightness(1.08) hue-rotate(6deg)')];
   sprs.pine = [0, 1, 2].map(i => sprite_pintado(110, 260, (g, w, h) => pintar_pino(g, w, h, 17 + i * 4)));
   sprs.giant = sprite_pintado(300, 460, (g, w, h) => pintar_roble(g, w, h, 100, 24));
   sprs.rock = [0.13, 0.57].map(s => sprite_pintado(110, 70, (g, w, h) => pintar_roca(g, w, h, s)));

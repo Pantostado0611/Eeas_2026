@@ -166,6 +166,7 @@ function dibujar_mundo() {
   for (const t of trees) {
     if (t.canopy > 100) agregar_visible(t.x, t.y, sprs.giant, 330, 520);
     else if (t.pine) agregar_visible(t.x, t.y, sprs.pine[Math.floor(t.shade * 2.99)], t.canopy * 1.9, t.canopy * 4.6);
+    else if (sprs.arbol) agregar_visible(t.x, t.y, sprs.arbol[Math.floor(t.shade * 2.99)], t.canopy * 2.0, t.canopy * 3.6);
     else agregar_visible(t.x, t.y, sprs.oak[Math.floor(t.shade * 2.99)], t.canopy * 2.3, t.canopy * 3.6);
   }
   for (const k of rocks) agregar_visible(k.x, k.y, sprs.rock[k.seed < 0.5 ? 0 : 1], k.r * 2.6, k.r * 1.7);
