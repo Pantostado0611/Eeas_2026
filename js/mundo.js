@@ -16,6 +16,16 @@ function mundo_libre(x, y, r, lista, pad) {
 }
 const mundo_lugar = kind => landmarks.find(l => l.kind === kind);
 
+// Todo lo que está al sur del campamento se "hunde" (baja) para que el comedor quepa junto al Río de las Ranas:
+// nada se mueve arriba de H_INI; de H_INI a H_MAX baja cada vez más (hasta HUNDIR) y de ahí al borde de abajo
+// se va juntando hasta no moverse en el borde (así el cerro no se sale del mapa).
+const HUNDIR = 350, H_INI = 4700, H_MAX = 5300;
+function hundir(y) {
+  if (y <= H_INI) return y;
+  if (y <= H_MAX) return y + HUNDIR * (y - H_INI) / (H_MAX - H_INI);
+  return y + HUNDIR * Math.max(0, WORLD - y) / (WORLD - H_MAX);
+}
+
 // Rejilla: para preguntar "¿hay algo aquí?" rápido sin revisar todos los círculos del mundo.
 // Cada círculo se guarda en las celdas que toca (agrandado por "extra" = lo más que se va a preguntar alrededor).
 // Da exactamente el mismo resultado que mundo_libre (solo es más rápido).
@@ -117,8 +127,8 @@ function rio_tangente(linea, i) {
 // afluentes: otras líneas que desembocan en el río; cruce: dónde van los muelles;
 // nombres: [muelle del lado del campamento, muelle del otro lado]; etq: en qué parte del río (0 a 1) va su nombre en el mapa
 function rio_crear(indice, nombre, pts, ancho, afluentes, cruce, nombres, etq) {
-  const esc = l => l.map(p => [p[0] * ESC, p[1] * ESC]); // los puntos están en el mapa de diseño
-  pts = esc(pts); afluentes = afluentes.map(esc); cruce = [cruce[0] * ESC, cruce[1] * ESC];
+  const esc = l => l.map(p => [p[0] * ESC, hundir(p[1] * ESC)]); // los puntos están en el mapa de diseño
+  pts = esc(pts); afluentes = afluentes.map(esc); cruce = [cruce[0] * ESC, hundir(cruce[1] * ESC)];
   const rio = { name: nombre, linea: rio_suavizar(pts, 40), afl: [], circ: [], etq: null, seguridad: null, tiras: [] };
   const n = rio.linea.length;
   for (let i = 0; i < n; i++) rio.circ.push({ x: rio.linea[i][0], y: rio.linea[i][1], r: ancho + 14 * Math.sin(i * 0.37) });
@@ -260,7 +270,7 @@ function monte_polar(a, u) {
 }
 
 function montana_crear() {
-  const m = { name: 'Cerro del Coyote', x: 650 * ESC, y: 3820 * ESC, H: cat.monte_alto, rc: 55, Rb: 450,
+  const m = { name: 'Cerro del Coyote', x: 650 * ESC, y: hundir(3820 * ESC), H: cat.monte_alto, rc: 55, Rb: 450,
     camino: [], cam_s: [], largo: 0, ancho: 70, ancho_angosto: 30, angostos: [], postes: [],
     rapel: null, v: [], col: [], nor: [], tiras: [], deco: [], K: 7, N: 40 };
   montana = m;
@@ -419,7 +429,8 @@ function mundo_generar(semilla) {
     const lx = rr(300, DISENO - 300), ly = rr(300, DISENO - 300), lr = rr(130, 240);
     if (mundo_libre(lx, ly, lr, keepD, 40) && mundo_libre(lx, ly, lr, lakesD, 150)) lakesD.push({ x: lx, y: ly, r: lr });
   }
-  lakes = lakesD.map(l => ({ x: l.x * ESC, y: l.y * ESC, r: l.r }));
+  lakes = lakesD.map(l => ({ x: l.x * ESC, y: hundir(l.y * ESC), r: l.r }));
+  for (const f of flags) f.y = hundir(f.y); // las bases del sur también bajan
   // Cada lago con una forma distinta, sacadas en desorden de esta lista (con su propio azar)
   const formas = ['ovalo', 'lagrima', 'brazos', 'chueco', 'dos'], gf = Mulberry32(semilla + 4242);
   for (let i = formas.length - 1; i > 0; i--) { const j = Math.floor(gf() * (i + 1)); [formas[i], formas[j]] = [formas[j], formas[i]]; }
@@ -431,10 +442,10 @@ function mundo_generar(semilla) {
   montana_crear();
   // la Base 4 queda en la cima de la montaña
   flags[3].x = montana.x; flags[3].y = montana.y; flags[3].cima = true;
-  comedor_crear(); // junto al campamento (ver comedor.js)
+  comedor_crear(); // al sur del campamento, a la orilla del Río de las Ranas (ver comedor.js)
 
-  // Lo que no se puede tapar con lagos ni lugares: campamento, comedor, bases, cerro, cascada
-  const keep = [{ x: camp.x, y: camp.y, r: 260 }, { x: comedor.x, y: comedor.y, r: comedor.radio + 60 },
+  // Lo que no se puede tapar con lagos ni lugares: campamento, comedor (y su camino), bases, cerro, cascada
+  const keep = [{ x: camp.x, y: camp.y, r: 260 }, { x: comedor.x, y: comedor.y, r: comedor.radio + 60 }, ...comedor_camino(),
     ...flags.map(f => ({ x: f.x, y: f.y, r: 110 })), { x: montana.x, y: montana.y, r: montana.Rb + 120 }, { x: cascada.x, y: cascada.y, r: 200 }];
   const agua_rios = lake_water.slice(n_lagos); // el agua de los ríos y la poza
   // Más lagos en el resto del mapa (con su propio azar)

@@ -43,9 +43,10 @@ function siguiente_comida_texto() {
 }
 
 // ---------- Forma del edificio ----------
-// Mide 900 x 540 y la puerta mira al norte (hacia el campamento). Adentro, la pared de la cocina está en x1 - 100.
+// Mide 900 x 540 y la puerta mira al norte (hacia el campamento); el porche mira al Río de las Ranas,
+// junto al Muelle del Pescador. Adentro, la pared de la cocina está en x1 - 100.
 function comedor_crear() {
-  const cx = camp.x, cy = camp.y + 640, W2 = 450, D2 = 270;
+  const cx = camp.x - 275, cy = camp.y + 1240, W2 = 450, D2 = 270;
   const c = comedor = {
     x: cx, y: cy, x0: cx - W2, x1: cx + W2, y0: cy - D2, y1: cy + D2,
     alto: 140, techo: 210, puerta: 50, puerta_alto: 100, porche: 130, xk: cx + 350,
@@ -71,6 +72,14 @@ function comedor_crear() {
   for (const m of c.mesas) c.muros.push([m.x - m.hw, m.y - m.hd - 22, m.x + m.hw, m.y + m.hd + 22]); // mesa y bancas
   for (let k = 0; k < 4; k++) { const mx = x0 + 120 + k * 220, my = y1 + 66; c.muros.push([mx - 45, my - 32, mx + 45, my + 32]); } // mesas del porche
   comedor_caras_crear();
+}
+// Camino de tierra de la fogata a la puerta del comedor: [x0, y0, x1, y1]
+const comedor_camino_ext = () => [camp.x, camp.y + 215, comedor.x, comedor.y0];
+// Círculos a lo largo del camino (para que no salgan árboles, piedras ni lagos encima)
+function comedor_camino() {
+  const [ax, ay, bx, by] = comedor_camino_ext(), n = Math.ceil(pdist(ax, ay, bx, by) / 80), res = [];
+  for (let i = 0; i <= n; i++) res.push({ x: ax + (bx - ax) * i / n, y: ay + (by - ay) * i / n, r: 50 });
+  return res;
 }
 const comedor_zona = () => comedor ? [{ x: comedor.x, y: comedor.y + comedor.porche / 2, r: comedor.radio + 20 }] : [];
 // Postes del porche (se chocan como los árboles)
@@ -540,7 +549,8 @@ function comedor_exterior_dibujar() {
 function comedor_suelo_dibujar() {
   if (!comedor || pdist(player.x, player.y, comedor.x, comedor.y) > FAR + comedor.radio) return;
   const c = comedor;
-  suelo_poligono([c.x - 34, camp.y + 215, c.x + 34, camp.y + 215, c.x + 34, c.y0, c.x - 34, c.y0], '#b98f62');
+  const [ax, ay, bx, by] = comedor_camino_ext(), l = pdist(ax, ay, bx, by), nx = -(by - ay) / l * 34, ny = (bx - ax) / l * 34;
+  suelo_poligono([ax - nx, ay - ny, ax + nx, ay + ny, bx + nx, by + ny, bx - nx, by - ny], '#b98f62');
   suelo_poligono([c.x0, c.y1, c.x1, c.y1, c.x1, c.y1 + c.porche + 6, c.x0, c.y1 + c.porche + 6], '#c9c2b2');
 }
 // Letrero de la entrada (dibujo parado)
