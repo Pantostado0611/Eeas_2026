@@ -153,6 +153,7 @@ let ridge = [], stars = [];
 function sprites_crear() {
   sprs.oak = [0, 1, 2].map(i => sprite_pintado(150, 230, (g, w, h) => pintar_roble(g, w, h, 95 + i * 12, 26 + i * 5)));
   // árbol dibujado a mano: 3 variantes (más oscuro, normal y volteado un poco más claro) para que no se vean todos iguales
+  if (IMGS.pino) sprs.pino = [sprite_imagen(IMGS.pino, false, 'brightness(0.8)'), sprite_imagen(IMGS.pino), sprite_imagen(IMGS.pino, true, 'brightness(1.1) hue-rotate(-8deg)')];
   if (IMGS.arbol) sprs.arbol = [sprite_imagen(IMGS.arbol, false, 'brightness(0.82) hue-rotate(-10deg)'), sprite_imagen(IMGS.arbol), sprite_imagen(IMGS.arbol, true, 'brightness(1.08) hue-rotate(6deg)')];
   sprs.pine = [0, 1, 2].map(i => sprite_pintado(110, 260, (g, w, h) => pintar_pino(g, w, h, 17 + i * 4)));
   sprs.giant = sprite_pintado(300, 460, (g, w, h) => pintar_roble(g, w, h, 100, 24));
