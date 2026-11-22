@@ -49,7 +49,7 @@ function comedor_crear() {
   const cx = camp.x - 275, cy = camp.y + 1240, W2 = 450, D2 = 270;
   const c = comedor = {
     x: cx, y: cy, x0: cx - W2, x1: cx + W2, y0: cy - D2, y1: cy + D2,
-    alto: 140, techo: 210, puerta: 50, puerta_alto: 100, porche: 130, xk: cx + 350,
+    alto: 140, techo: 210, puerta: 50, puerta_alto: 100, porche: 130, xk: cx + 350, puerta_sur: [cx - 50, cx + 50],
     radio: Math.hypot(W2, D2 + 130), fuera: [], dentro_paredes: [], dentro_cosas: [],
     ventanillas: [], mesas: [], muros: [], mecedoras: [], lamparas: [],
   };
@@ -65,12 +65,14 @@ function comedor_crear() {
 
   // Muros para chocar (rectángulos [x0, y0, x1, y1]); la puerta es un hueco en la pared norte
   const g = 6;
+  const [sa, sb] = c.puerta_sur;
   c.muros.push([x0, y0 - g, cx - c.puerta, y0 + g], [cx + c.puerta, y0 - g, x1, y0 + g], // norte (con la puerta)
-    [x0, y1 - g, x1, y1 + g], [x0 - g, y0, x0 + g, y1], [x1 - g, y0, x1 + g, y1],      // sur, oeste, este
+    [x0, y1 - g, sa, y1 + g], [sb, y1 - g, x1, y1 + g],                                // sur (con la puerta al porche)
+    [x0 - g, y0, x0 + g, y1], [x1 - g, y0, x1 + g, y1],                                // oeste, este
     [xk - 30, y0, xk + g, y1],                                                         // pared de la cocina (con su repisa)
     [x0, cy - 70, x0 + 30, cy + 70]);                                                  // chimenea
   for (const m of c.mesas) c.muros.push([m.x - m.hw, m.y - m.hd - 22, m.x + m.hw, m.y + m.hd + 22]); // mesa y bancas
-  for (let k = 0; k < 4; k++) { const mx = x0 + 120 + k * 220, my = y1 + 66; c.muros.push([mx - 45, my - 32, mx + 45, my + 32]); } // mesas del porche
+  for (const mu of PORCHE_MESAS) { const mx = cx + mu, my = y1 + 66; c.muros.push([mx - 45, my - 32, mx + 45, my + 32]); } // mesas del porche
   comedor_caras_crear();
 }
 // Camino de tierra de la fogata a la puerta del comedor: [x0, y0, x1, y1]
@@ -81,11 +83,12 @@ function comedor_camino() {
   for (let i = 0; i <= n; i++) res.push({ x: ax + (bx - ax) * i / n, y: ay + (by - ay) * i / n, r: 50 });
   return res;
 }
+const PORCHE_MESAS = [-360, -200, 160, 340]; // mesas rojas del porche (x desde el centro): libre frente a la puerta
 const comedor_zona = () => comedor ? [{ x: comedor.x, y: comedor.y + comedor.porche / 2, r: comedor.radio + 20 }] : [];
 // Postes del porche (se chocan como los árboles)
 function comedor_postes() {
   const c = comedor, res = [];
-  for (let k = 0; k < 7; k++) res.push({ x: c.x0 + 20 + k * (c.x1 - c.x0 - 40) / 6, y: c.y1 + c.porche, r: 8 });
+  for (let k = 0; k < 8; k++) res.push({ x: c.x0 + 20 + k * (c.x1 - c.x0 - 40) / 7, y: c.y1 + c.porche, r: 8 }); // dos quedan a los lados de la puerta
   return res;
 }
 // ¿(x, y) está dentro del salón?
@@ -213,8 +216,8 @@ function comedor_caras_crear() {
   const VA = 32, VB = 80; // altura de las ventanas: de 32 a 80 (como de 0.9 a 2.3 m)
   // ventanas (entre las columnas de adentro); las de la cocina solo se ven por fuera
   const v_norte = [[cx - 432, cx - 328], [cx - 292, cx - 188], [cx - 150, cx - 80], [cx + 108, cx + 202], [cx + 238, cx + 332]];
-  const v_sur = [[cx - 432, cx - 328], [cx - 292, cx - 188], [cx - 150, cx - 40], [cx - 10, cx + 70], [cx + 238, cx + 332]];
-  const puertas_sur = [cx + 115, cx + 195];              // puertas de vidrio al porche
+  const v_sur = [[cx - 432, cx - 328], [cx - 292, cx - 188], [cx - 150, cx - 80], [cx + 108, cx + 202], [cx + 238, cx + 332]];
+  const [pa, pb] = c.puerta_sur;                          // puerta al porche
   const v_cocina = [cx + 372, cx + 430];
   const v_oeste = [[cy - 215, cy - 120], [cy + 120, cy + 215]];
   const columnas = [cx - 310, cx - 170, cx + 90, cx + 220]; // columnas verdes (y vigas del techo)
@@ -226,14 +229,19 @@ function comedor_caras_crear() {
   ladrillos(nIzq.hijos, 'y', y0, x0, cx - P, 0, alto, lad); ladrillos(nDer.hijos, 'y', y0, cx + P, x1, 0, alto, lad);
   ladrillos(nArr.hijos, 'y', y0, cx - P, cx + P, PA, alto, lad);
   cara(nIzq.hijos, rect3('y', y0, cx - P - 4, cx + P + 4, 0, PA + 4), marco, null);
+  cara(nDer.hijos, rect3('y', y0, cx + P, cx + P + 4, 0, PA + 4), marco, null); // el lado derecho del marco va sobre la otra pared
   cara(nIzq.hijos, rect3('y', y0, cx - P, cx + P, 0, PA), '#d8c9a8', null); // la puerta abierta: se ve la luz de adentro
   for (const [a, b] of v_norte) ventana(a < cx ? nIzq.hijos : nDer.hijos, 'y', y0, a, b, VA, VB, vidrio_fuera, marco);
   ventana(nDer.hijos, 'y', y0, v_cocina[0], v_cocina[1], VA, VB, vidrio_fuera, marco);
-  const sur = pared_y(F, y1, x0, x1, 0, alto, lad_s, 1);
-  ladrillos(sur.hijos, 'y', y1, x0, x1, 0, alto, lad_s);
-  for (const [a, b] of v_sur) ventana(sur.hijos, 'y', y1, a, b, VA, VB, vidrio_fuera, marco);
-  ventana(sur.hijos, 'y', y1, puertas_sur[0], puertas_sur[1], 0, 90, vidrio_fuera, marco);
-  ventana(sur.hijos, 'y', y1, v_cocina[0], v_cocina[1], VA, VB, vidrio_fuera, marco);
+  const sIzq = pared_y(F, y1, x0, pa, 0, alto, lad_s, 1), sDer = pared_y(F, y1, pb, x1, 0, alto, lad_s, 1);
+  const sArr = pared_y(F, y1, pa, pb, PA, alto, lad_s, 1);
+  ladrillos(sIzq.hijos, 'y', y1, x0, pa, 0, alto, lad_s); ladrillos(sDer.hijos, 'y', y1, pb, x1, 0, alto, lad_s);
+  ladrillos(sArr.hijos, 'y', y1, pa, pb, PA, alto, lad_s);
+  cara(sIzq.hijos, rect3('y', y1, pa - 4, pb + 4, 0, PA + 4), marco, null);
+  cara(sDer.hijos, rect3('y', y1, pb, pb + 4, 0, PA + 4), marco, null);
+  cara(sIzq.hijos, rect3('y', y1, pa, pb, 0, PA), '#d8c9a8', null); // la puerta abierta: se ve la luz de adentro
+  for (const [a, b] of v_sur) ventana(a < pa ? sIzq.hijos : sDer.hijos, 'y', y1, a, b, VA, VB, vidrio_fuera, marco);
+  ventana(sDer.hijos, 'y', y1, v_cocina[0], v_cocina[1], VA, VB, vidrio_fuera, marco);
   // paredes de los lados con el triángulo del techo (dos aguas): ladrillo abajo y tablas arriba
   const oeste = cara(F, [x0, y0, 0, x0, y1, 0, x0, y1, alto, x0, cy, techo, x0, y0, alto], lad_l, [-1, 0, 0]);
   const este = cara(F, [x1, y0, 0, x1, y1, 0, x1, y1, alto, x1, cy, techo, x1, y0, alto], lad_l, [1, 0, 0]);
@@ -260,8 +268,8 @@ function comedor_caras_crear() {
   const tablas = [];
   for (let x = x0 + 16; x < x1; x += 16) tablas.push([x - 0.8, y1, ph, x + 0.8, y1, ph, x + 0.8, py, ph - 6, x - 0.8, py, ph - 6]);
   multi(pt.hijos, tablas, () => ojo > ph ? hex_rgb('#7d8388') : hex_rgb('#a57a48'));
-  for (let k = 0; k < 4; k++) {
-    const mx = x0 + 120 + k * 220, my = y1 + 66;
+  for (const mu of PORCHE_MESAS) {
+    const mx = cx + mu, my = y1 + 66;
     caja3(F, mx - 45, my - 14, mx + 45, my + 14, 26, 31, '#9a2a2a', '#7a2020');
     caja3(F, mx - 45, my - 32, mx + 45, my - 24, 15, 18, '#9a2a2a', '#7a2020');
     caja3(F, mx - 45, my + 24, mx + 45, my + 32, 15, 18, '#9a2a2a', '#7a2020');
@@ -285,11 +293,13 @@ function comedor_caras_crear() {
   lambrin_en(ni.hijos, 'y', y0, x0, cx - P); lambrin_en(nd.hijos, 'y', y0, cx + P, xk);
   for (const [a, b] of v_norte) ventana(a < cx ? ni.hijos : nd.hijos, 'y', y0, a, b, VA, VB, vidrio_dentro, marco_d);
   columnas_en(ni.hijos, 'y', y0, columnas.filter(u => u < cx - P)); columnas_en(nd.hijos, 'y', y0, columnas.filter(u => u > cx + P));
-  const ds = pared_y(D, y1, x0, xk, 0, alto, crema2, -1);
-  lambrin_en(ds.hijos, 'y', y1, x0, xk);
-  for (const [a, b] of v_sur) ventana(ds.hijos, 'y', y1, a, b, VA, VB, vidrio_dentro, marco_d);
-  ventana(ds.hijos, 'y', y1, puertas_sur[0], puertas_sur[1], 0, 90, vidrio_dentro, marco_d);
-  columnas_en(ds.hijos, 'y', y1, columnas);
+  const si = pared_y(D, y1, x0, pa, 0, alto, crema2, -1), sd = pared_y(D, y1, pb, xk, 0, alto, crema2, -1);
+  pared_y(D, y1, pa, pb, PA, alto, crema2, -1);
+  // por la puerta del porche se ve afuera: cielo arriba y el piso del porche abajo
+  pared_y(D, y1, pa, pb, EYE, PA, puerta_dentro, -1); pared_y(D, y1, pa, pb, 0, EYE, () => es_noche() ? hex_rgb('#2a2f3a') : hex_rgb('#c9c2b2'), -1);
+  lambrin_en(si.hijos, 'y', y1, x0, pa); lambrin_en(sd.hijos, 'y', y1, pb, xk);
+  for (const [a, b] of v_sur) ventana(a < pa ? si.hijos : sd.hijos, 'y', y1, a, b, VA, VB, vidrio_dentro, marco_d);
+  columnas_en(si.hijos, 'y', y1, columnas.filter(u => u < pa)); columnas_en(sd.hijos, 'y', y1, columnas.filter(u => u > pb));
   const dw = cara(D, [x0, y0, 0, x0, y1, 0, x0, y1, alto, x0, cy, techo, x0, y0, alto], crema2, [1, 0, 0]);
   lambrin_en(dw.hijos, 'x', x0, y0, y1);
   for (const [a, b] of v_oeste) ventana(dw.hijos, 'x', x0, a, b, VA, VB, vidrio_dentro, marco_d);
@@ -379,10 +389,11 @@ function empujar_rect(r, PR) {
 function comedor_chocar(PR) {
   if (!comedor || pdist(player.x, player.y, comedor.x, comedor.y) > comedor.radio + 60) return;
   const c = comedor, estaba = adentro;
-  c.muros.forEach((r, i) => empujar_rect(r, i < 6 ? PR + 10 : PR)); // los primeros 6 son paredes
+  c.muros.forEach((r, i) => empujar_rect(r, i < 7 ? PR + 10 : PR)); // los primeros 7 son paredes
   // con charola no se sale: regla del comedor
-  if (estaba && charola > 0 && player.y < c.y0 + PR + 4) {
-    player.y = c.y0 + PR + 4;
+  const sale_n = player.y < c.y0 + PR + 4, sale_s = player.y > c.y1 - PR - 4;
+  if (estaba && charola > 0 && (sale_n || sale_s)) {
+    player.y = sale_n ? c.y0 + PR + 4 : c.y1 - PR - 4;
     if (ahora() - comedor_aviso_t > 2500) {
       comedor_aviso_t = ahora();
       toast(charola === 2 || charola === 3 ? '¡Todavía no comes! Siéntate en una mesa con ' + tecla_entre_corchetes('usar') + '.'
