@@ -77,11 +77,17 @@ function pintar_tienda(g, w, h, col) {
   tri(g, w / 2, 0, w, h, w / 2, h, 'rgba(0,0,0,0.2)');
   tri(g, w / 2, h * 0.35, w * 0.64, h, w * 0.36, h, '#2b2018');
 }
+// Asta alta (más que las copas de los árboles) para que la bandera se vea desde lejos; la tela va arriba
 function pintar_bandera(g, w, h, done, n) {
+  const fh = w * 0.78; // alto de la tela
   caja(g, w * 0.15, 0, w * 0.23, h, '#6b4a2b');
-  tri(g, w * 0.23, h * 0.03, w, h * 0.17, w * 0.23, h * 0.33, done ? '#3fae4a' : '#e0402c');
-  g.font = fuente(h * 0.16, true); g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(n, w * 0.5, h * 0.18);
+  caja(g, w * 0.19, 0, w * 0.23, h, '#523820');
+  blob(w * 0.19, 0, w * 0.06, '#e8c23a', g); // bolita dorada en la punta
+  // borde blanco para que resalte contra el verde del bosque
+  tri(g, w * 0.21, h * 0.004, w + 1, fh * 0.5 + 2, w * 0.21, fh + 6, '#fff');
+  tri(g, w * 0.23, h * 0.02, w - 3, fh * 0.5 + 2, w * 0.23, fh, done ? '#3fae4a' : '#ff3b1f');
+  g.font = fuente(fh * 0.4, true); g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(n, w * 0.48, fh * 0.52);
 }
 function pintar_rama(g, w, h) {
   linea_redonda(2, h * 0.7, w - 2, h * 0.4, h * 0.6, '#6b4a2b', g);
@@ -161,7 +167,7 @@ function sprites_crear() {
   if (IMGS.gigante) sprs.gigante = sprite_imagen(IMGS.gigante);
   sprs.rock = [0.13, 0.57].map(s => sprite_pintado(110, 70, (g, w, h) => pintar_roca(g, w, h, s)));
   sprs.tent = ['#d9813b', '#3b7bd9', '#c9b13a'].map(c => sprite_pintado(120, 80, (g, w, h) => pintar_tienda(g, w, h, c)));
-  sprs.flag = [false, true].map(d => [1, 2, 3, 4, 5].map(n => sprite_pintado(60, 140, (g, w, h) => pintar_bandera(g, w, h, d, n))));
+  sprs.flag = [false, true].map(d => [1, 2, 3, 4, 5].map(n => sprite_pintado(60, 330, (g, w, h) => pintar_bandera(g, w, h, d, n))));
   sprs.stick = sprite_pintado(40, 12, pintar_rama);
   sprs.tuft = [0, 1, 2].map(k => sprite_pintado(24, 22, (g, w, h) => pintar_mata(g, w, h, k)));
   sprs.chalecos = sprite_pintado(90, 80, pintar_chalecos);

@@ -57,7 +57,7 @@ function empezar_juego() {
   creditos_paso = 'pregunta'; creditos_t = 0;
   energy = 100; wood = 0; food = cat.food;
   rain = false; rain_timer = 0; next_rain = (70 + random(60)) * cat.rain;
-  drops = []; toasts = [];
+  drops = []; toasts = []; ramas_aviso = false;
   playTime = 0;
   state = 'play';
   toast('Primero prende la fogata: acércate y presiona ' + tecla_entre_corchetes('usar') + '.', 7);

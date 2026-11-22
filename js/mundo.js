@@ -217,6 +217,29 @@ function agua_en(x, y, margen) {
   for (const o of lake_water) if (pdist(o.x, o.y, x, y) < o.r - margen) return true;
   return false;
 }
+// ¿(x, y) está en el agua que se DIBUJA? (en las curvas del río los círculos de agua_en se salen un poco a la tierra)
+function cuad_tiene(q, x, y) {
+  let s = 0;
+  for (let i = 0; i < 4; i++) {
+    const ax = q[i * 2], ay = q[i * 2 + 1], bx = q[(i * 2 + 2) % 8], by = q[(i * 2 + 3) % 8];
+    const c = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+    if (c === 0) continue;
+    if (s === 0) s = Math.sign(c); else if (Math.sign(c) !== s) return false;
+  }
+  return true;
+}
+function agua_dibujada(x, y) {
+  for (const r of rios) for (const q of r.tiras)
+    if (Math.abs(q.x - x) < q.r && Math.abs(q.y - y) < q.r && cuad_tiene(q.agua, x, y)) return true;
+  for (const l of lakes) for (const o of l.lobes) if (pdist(o.x, o.y, x, y) < o.r) return true;
+  return cascada ? pdist(cascada.x, cascada.y, x, y) < cascada.r : false;
+}
+// Para la canoa: agua con margen y que también se vea como agua alrededor (así nunca "navega" sobre el pasto)
+function agua_canoa(x, y) {
+  if (!agua_en(x, y, 40)) return false;
+  for (const [dx, dy] of [[0, 0], [24, 0], [-24, 0], [0, 24], [0, -24]]) if (!agua_dibujada(x + dx, y + dy)) return false;
+  return true;
+}
 // Hacia dónde jala la corriente en (x, y): [dx, dy] unitario (o [0, 0] lejos de los ríos)
 function rio_corriente(x, y) {
   let best = [0, 0], bd = Infinity;
@@ -474,7 +497,7 @@ function mundo_generar(semilla) {
   for (const [art, name, kind, r] of LUGARES) {
     for (let tries = 0; tries < 400; tries++) {
       const px = rr(350, WORLD - 350), py = rr(350, WORLD - 350);
-      if (lugar_libre(px, py, r, kind)) { landmarks.push({ art, name, kind, x: px, y: py, r, zone: r + 40 }); break; }
+      if (lugar_libre(px, py, r, kind)) { landmarks.push({ art, name, kind, x: px, y: py, r, zone: r + (kind === 'pinar' ? 40 : 160) }); break; }
     }
   }
   // Ninguna base lejos de un lugar con nombre (del mismo lado del río): si hace falta, se pone uno cerca
@@ -489,7 +512,7 @@ function mundo_generar(semilla) {
       const a = gb() * PI * 2, d = 450 + r + gb() * 600, px = f.x + Math.cos(a) * d, py = f.y + Math.sin(a) * d;
       if (px < 300 || py < 300 || px > WORLD - 300 || py > WORLD - 300) continue;
       if (!mismo_lado(f, { x: px, y: py }) || !lugar_libre(px, py, r, kind)) continue;
-      landmarks.push({ art, name, kind, x: px, y: py, r, zone: r + 40 }); extra++;
+      landmarks.push({ art, name, kind, x: px, y: py, r, zone: r + (kind === 'pinar' ? 40 : 160) }); extra++;
       break;
     }
   }

@@ -152,7 +152,7 @@ function hud_dibujar() {
 }
 
 // ---------- Brújula ----------
-// Arriba es hacia donde miras: las letras giran contigo y la aguja roja siempre apunta al frente.
+// Arriba es hacia donde miras (la marquita de arriba): las letras giran contigo y la aguja roja siempre apunta al norte.
 // Debajo van las pistas: rumbo (Caminante y Rover), pasos (Rover), a dónde ir y cuántas bases llevas.
 function brujula_dibujar(k = 1) {
   const R = 62 * k, cx = W - R - 22 * k, cy = R + 22 * k, tg = target(), borde = '#8e7a4a';
@@ -169,9 +169,10 @@ function brujula_dibujar(k = 1) {
   }
   ctx.stroke();
   poligono([cx, cy - R - 9 * k, cx - 6 * k, cy - R - 1 * k, cx + 6 * k, cy - R - 1 * k], borde); // marca de "al frente"
-  // aguja: roja hacia el frente (arriba), gris hacia atrás
-  poligono([cx, cy - (R - 20 * k), cx - 6 * k, cy, cx + 6 * k, cy], '#c0392b');
-  poligono([cx, cy + (R - 26 * k), cx - 6 * k, cy, cx + 6 * k, cy], '#555');
+  // aguja: la punta roja siempre apunta al norte de verdad (donde está la N); la gris al sur
+  const an = vista - PI / 2, cs = Math.cos(an), sn = Math.sin(an), pc = -sn * 6 * k, ps = cs * 6 * k;
+  poligono([cx + cs * (R - 20 * k), cy + sn * (R - 20 * k), cx + pc, cy + ps, cx - pc, cy - ps], '#c0392b');
+  poligono([cx - cs * (R - 26 * k), cy - sn * (R - 26 * k), cx + pc, cy + ps, cx - pc, cy - ps], '#555');
   blob(cx, cy, 4 * k, '#222');
 
   // Pistas: en la computadora debajo de la brújula; en el celular a su izquierda (abajo están los botones)
@@ -386,15 +387,25 @@ function mapa_dibujar_en(x0, y0, size) {
   // Cada nombre se prueba arriba de su lugar, abajo, a la derecha y a la izquierda: va en el primero donde no choque
   const poner = (x, y, r, nombre, col) => {
     const w = texto_ancho(nombre, px, true) + 6, h = px + 4;
-    const opciones = [[x, y - r - 6], [x, y + r + px + 4], [x + r + w / 2 + 4, y + px * 0.35], [x - r - w / 2 - 4, y + px * 0.35], [x, y - r - 6 - h], [x, y + r + px + 4 + h]];
-    for (const [ox, oy] of opciones) {
-      const cx = clamp(ox, x0 + w / 2 + 2, x0 + size - w / 2 - 2), cy = clamp(oy, y0 + px + 2, y0 + size - 4);
-      const caja = [cx - w / 2, cy - px, cx + w / 2, cy + 4];
-      if (puestos.some(b => caja[0] < b[2] && caja[2] > b[0] && caja[1] < b[3] && caja[3] > b[1])) continue;
-      puestos.push(caja);
-      texto_borde(cx, cy, nombre, px, col, 'rgb(255,250,235)');
-      return;
+    // (con un espacio entre nombres para que no se vean amontonados)
+    // Si no cabe en ningún lado, se prueba un poco más lejos; si de plano no cabe, va donde choque menos.
+    const sep = Math.max(2, Math.round(px * 0.3)), choque = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    let mejor = null;
+    for (const lejos of [0, h * 1.2, h * 2.4]) {
+      const dx = r + w / 2 + 4 + lejos * 0.6, dy = r + px * 0.5 + lejos;
+      const opciones = [[x, y - r - 6 - lejos], [x, y + r + px + 4 + lejos], [x + dx, y + px * 0.35], [x - dx, y + px * 0.35],
+        [x + dx, y - dy], [x - dx, y - dy], [x + dx, y + dy + px], [x - dx, y + dy + px]];
+      for (const [ox, oy] of opciones) {
+        const cx = clamp(ox, x0 + w / 2 + 2, x0 + size - w / 2 - 2), cy = clamp(oy, y0 + px + 2, y0 + size - 4);
+        const caja = [cx - w / 2 - sep, cy - px - sep, cx + w / 2 + sep, cy + 4 + sep];
+        const c = puestos.reduce((s, b) => s + choque(caja, b), 0);
+        if (!mejor || c < mejor.c) mejor = { c, cx, cy, caja };
+        if (c === 0) break;
+      }
+      if (mejor.c === 0) break;
     }
+    puestos.push(mejor.caja);
+    texto_borde(mejor.cx, mejor.cy, nombre, px, col, 'rgb(255,250,235)');
   };
   // primero los ríos (azul), luego campamento y comedor, luego lo demás
   for (const r of rios) poner(x0 + r.etq[0] * k, y0 + r.etq[1] * k, 0, r.name, '#173f63');

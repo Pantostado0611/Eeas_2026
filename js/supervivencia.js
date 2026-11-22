@@ -27,7 +27,9 @@ function cerca_de_algo() {
   if (mc) return mc;
   if (adentro) return comedor_cerca();
   if (monte_modo !== '') return null;
-  if (dist(player, camp) < 80) {
+  // la fogata: solo si estás cerca y mirando hacia ella (si le das la espalda y ves una casa de campaña, no sale el letrero)
+  const af = Math.atan2(camp.y - player.y, camp.x - player.x) - player.ang;
+  if (dist(player, camp) < 80 && (dist(player, camp) < 25 || Math.cos(af) > 0.5)) {
     if (!fire.lit) return { kind: 'fire', label: u + 'Prender la fogata' };
     return { kind: 'fire', label: wood > 0 ? u + 'Echar leña' : 'Necesitas leña' };
   }
@@ -75,13 +77,22 @@ function clima_actualizar(dt) {
     if (next_rain <= 0) { rain = true; rain_timer = 30 + random(35); toast('Empezó a llover: el fuego se gasta más rápido.', 4); }
   }
 }
+let ramas_aviso = false; // ¿ya se explicó cómo se recogen las ramas? (una vez por partida)
 function supervivencia_actualizar(dt, running) {
   // Al entrar a un lugar conocido te dice su nombre
   let pn = '';
-  for (const l of landmarks) if (dist(player, l) < l.zone) { pn = l.name; break; }
+  // (si estás en la zona de dos lugares, gana al que estás más cerca: así la piedra junto al muelle sí sale)
+  let pd = Infinity;
+  for (const l of landmarks) { const d = dist(player, l); if (d < l.zone && d - l.r < pd) { pd = d - l.r; pn = l.name; } }
   if (pn !== player.place) { if (pn !== '' && player.place !== null) toast(pn); player.place = pn; }
 
-  // Ramas: se recogen solas al pasar
+  // Ramas: se recogen solas al pasar. La primera vez que ves una cerca te avisa cómo se recogen.
+  if (!ramas_aviso && fire.lit && wood === 0 && monte_modo === '' && !adentro)
+    for (const s of sticks) if (dist(player, s) < 260) {
+      ramas_aviso = true;
+      toast('¿Ves esa rama en el suelo? Las ramas se recogen solas: nomás pasa caminando por encima.', 6);
+      break;
+    }
   for (let i = sticks.length - 1; i >= 0; i--) {
     if (wood < WOOD_MAX && dist(player, sticks[i]) < 26) {
       sticks.splice(i, 1); wood++; mundo_poner_rama();
@@ -93,9 +104,9 @@ function supervivencia_actualizar(dt, running) {
   // Fogata: si se apaga, se acaba el juego
   if (fire.lit) {
     const antes = fire.fuel;
-    // Recién prendida (70) dura 5:15 sin lluvia y unos 4:10 con lluvia en Tropa (1.5 veces lo del mapa chico);
-    // las demás categorías por fire_dur
-    fire.fuel -= dt * (rain ? 70 / 165 : 70 / 210) / cat.fire_dur / 1.5;
+    // Recién prendida (70) dura casi 8 minutos sin lluvia y unos 6:15 con lluvia en Tropa (2.25 veces lo del mapa chico,
+    // para que alcance a ir a una base del otro lado del río y regresar); las demás categorías por fire_dur
+    fire.fuel -= dt * (rain ? 70 / 165 : 70 / 210) / cat.fire_dur / 2.25;
     if (antes > 25 && fire.fuel <= 25) toast('¡La fogata se está apagando! Échale leña.', 4);
     if (antes > 10 && fire.fuel <= 10) toast('¡Ya casi se apaga la fogata! Corre con leña.', 4);
     if (fire.fuel <= 0) { fire.fuel = 0; lose_reason = 'fogata'; state = 'lose'; return; }
@@ -321,9 +332,9 @@ function rio_actualizar(dt) {
   c.ang += c.w * dt;
   const f = rio_corriente(c.x, c.y), C = remo_corriente();
   const nx = c.x + (Math.cos(c.ang) * c.v + f[0] * C) * dt, ny = c.y + (Math.sin(c.ang) * c.v + f[1] * C) * dt;
-  if (agua_en(nx, ny, 22)) { c.x = nx; c.y = ny; }          // la orilla no deja pasar
-  else if (agua_en(nx, c.y, 22)) { c.x = nx; c.v *= 0.5; }
-  else if (agua_en(c.x, ny, 22)) { c.y = ny; c.v *= 0.5; }
+  if (agua_canoa(nx, ny)) { c.x = nx; c.y = ny; }          // la orilla no deja pasar (ver agua_canoa)
+  else if (agua_canoa(nx, c.y)) { c.x = nx; c.v *= 0.5; }
+  else if (agua_canoa(c.x, ny)) { c.y = ny; c.v *= 0.5; }
   else c.v *= 0.3;
   player.x = c.x; player.y = c.y; player.ang = c.ang; player.moving = false;
   // llegar al muelle de enfrente (o regresar al mismo)
@@ -339,7 +350,7 @@ function rescate_actualizar(dt) {
   player.ang += clamp((kd(b.derecha) ? 1 : 0) - (kd(b.izquierda) ? 1 : 0) + tactil_giro, -1, 1) * 1.6 * dt;
   const f = rio_corriente(player.x, player.y), C = remo_corriente() * 0.5, nado = (kd(b.adelante) || tactil_avance > 0.3) ? 35 : 0;
   const nx = player.x + (Math.cos(player.ang) * nado + f[0] * C) * dt, ny = player.y + (Math.sin(player.ang) * nado + f[1] * C) * dt;
-  if (agua_en(nx, ny, 10)) { player.x = nx; player.y = ny; }
+  if (agua_en(nx, ny, 10) && agua_dibujada(nx, ny)) { player.x = nx; player.y = ny; }
   player.moving = false;
   // agitarse (clics, correr, apretar teclas de golpe) cansa
   if ((!tactil && (raton.pulsado[0] || raton.pulsado[2])) || tactil_agita || kp(b.correr) || kp(b.usar) || kp(' ')) r.agit += 0.35;

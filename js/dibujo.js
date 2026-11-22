@@ -174,7 +174,7 @@ function dibujar_mundo() {
   for (const k of rocks) agregar_visible(k.x, k.y, sprs.rock[k.seed < 0.5 ? 0 : 1], k.r * 2.6, k.r * 1.7);
   for (const t of tents) agregar_visible(t.x, t.y, sprs.tent[t.idx], 96, 66);
   for (const f of flags) // en Rover son invisibles hasta revelarlas
-    if (f.done || cat.hint !== 'ruta') agregar_visible(f.x, f.y, sprs.flag[f.done ? 1 : 0][f.n - 1], 46, 120, f.cima ? montana.H : 0);
+    if (f.done || cat.hint !== 'ruta') agregar_visible(f.x, f.y, sprs.flag[f.done ? 1 : 0][f.n - 1], 50, 275, f.cima ? montana.H : 0);
   for (const s of sticks) agregar_visible(s.x, s.y, sprs.stick, 30, 9);
   const px = player.x, py = player.y;
   for (const d of decos) if (Math.abs(d.x - px) + Math.abs(d.y - py) < 700) agregar_visible(d.x, d.y, sprs.tuft[d.k === 2 ? 2 : d.k % 2], 16, 14);
