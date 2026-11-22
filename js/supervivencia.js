@@ -5,7 +5,8 @@ const WOOD_MAX = 8;    // leña que puedes cargar
 const FOOD_MAX = RACIONES_MAX; // raciones que puedes cargar (te las dan en el comedor)
 
 // ---------- Mensajes cortos ----------
-function toast(text, t = 3) { toasts.push({ text, t }); if (toasts.length > 3) toasts.shift(); }
+// duran más: el doble y un poco más si el mensaje es largo (para alcanzar a leerlo)
+function toast(text, t = 3) { toasts.push({ text, t: Math.min(12, t * 1.8 + text.length * 0.04) }); if (toasts.length > 3) toasts.shift(); }
 function toasts_actualizar(dt) {
   for (let i = toasts.length - 1; i >= 0; i--) { toasts[i].t -= dt; if (toasts[i].t <= 0) toasts.splice(i, 1); }
 }

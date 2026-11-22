@@ -508,7 +508,7 @@ function cara_dibujar(it) {
     ctx.fill('nonzero');
   };
   pintar(it.c);
-  for (const h of it.c.hijos) if (!h.detalle || it.d < 650) pintar(h);
+  for (const h of it.c.hijos) if (!h.detalle || it.d < 320) pintar(h);
 }
 // Por fuera: entra a la lista de lo que se ve como una sola cosa (como el cerro)
 function comedor_agregar() {

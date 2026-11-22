@@ -121,12 +121,12 @@ function hud_dibujar() {
   if (tactil) {
     // en la canoa, el agua y el rapel van más abajo (arriba están sus avisos y barras)
     let y = (canoa || rescate || rapel) ? 252 : H * 0.34;
-    const px = fk(15, k);
-    for (const t of toasts) y += pastilla_varias(W / 2, y, t.text, px, Math.min(1, t.t * 2), W * 0.5) + 6;
+    const px = fk(18, k);
+    for (const t of toasts) y += pastilla_varias(W / 2, y, t.text, px, Math.min(1, t.t * 2), W * 0.62) + 6;
   } else {
     // abajo en medio, del más nuevo (abajo) al más viejo (arriba); si no caben en un renglón se parten
     // si al lado del minimapa no cabe (ventana angosta), van arriba de él a todo lo ancho
-    const px = fk(17, k), angosta = W - 2 * (MAP * k + 40) < 300, max_w = angosta ? W - 24 : W - 2 * (MAP * k + 40);
+    const px = fk(21, k), angosta = W - 2 * (MAP * k + 40) < 300, max_w = angosta ? W - 24 : W - 2 * (MAP * k + 40);
     let y = angosta ? H - MAP * k - 40 : H - 34 * k;
     for (let i = nt - 1; i >= 0; i--) {
       const t = toasts[i], h = pastilla_varias(W / 2, 0, t.text, px, 1, max_w, false);
@@ -381,6 +381,7 @@ function mapa_construir() {
 function mapa_dibujar_en(x0, y0, size) {
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(mapa_cv, x0, y0, size, size);
+  ctx.imageSmoothingQuality = 'low'; // lo demás (árboles) en rápido
   const k = size / WORLD, px = Math.max(9, Math.round(size / 42)), puestos = [];
   // Cada nombre se prueba arriba de su lugar, abajo, a la derecha y a la izquierda: va en el primero donde no choque
   const poner = (x, y, r, nombre, col) => {
@@ -428,6 +429,7 @@ function minimapa_dibujar(k = 1) {
   rect_redondo(x0 - 6, y0 - 6, t + 12, t + 12, 10, '#d8cfb4', 1);
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(mapa_mini, x0, y0, t, t);
+  ctx.imageSmoothingQuality = 'low';
   rosa_vientos(x0 + 20 * k, y0 + 20 * k, 15 * k, false);
   const lbl = '[' + nombre_tecla(settings.binds.mapa) + '] pasaporte', px = fk(11, k), lw = texto_ancho(lbl, px, true) + 14;
   rect_redondo(x0 + t / 2 - lw / 2, y0 + t - 22 * k, lw, 18 * k, 6, '#000', 0.6);
