@@ -334,7 +334,7 @@ function titulo_parado_dibujar() {
 
 // ---------- Mapa del bosque ----------
 // Como un mapa de papel: no marca dónde estás ni las banderas. Se dibuja una sola vez por bosque.
-const MAP = 180, MAP_RES = 700;
+const MAP = 180, MAP_RES = 1400; // en alta resolución para que la lupa del pasaporte se vea nítida
 const mapa_cv = document.createElement('canvas'); mapa_cv.width = mapa_cv.height = MAP_RES;
 const mapa_mini = document.createElement('canvas'); mapa_mini.width = mapa_mini.height = MAP;
 function mapa_construir() {
@@ -372,45 +372,194 @@ function mapa_construir() {
   for (const t of tents) circ(t.x, t.y, 34, t.color);
   circ(camp.x, camp.y, 30, '#e8692a');
   for (const arbol of landmarks.filter(l => l.kind === 'arbol')) { circ(arbol.x, arbol.y, 135, '#2d5a26'); circ(arbol.x - 30, arbol.y - 30, 60, '#3f7a33'); }
-  g.strokeStyle = 'rgba(60,40,20,0.6)'; g.lineWidth = 6; g.strokeRect(0, 0, MAP_RES, MAP_RES); // marco
+  g.strokeStyle = 'rgba(60,40,20,0.6)'; g.lineWidth = MAP_RES / 116; g.strokeRect(0, 0, MAP_RES, MAP_RES); // marco
   // copia ya achicada para el minimapa (se ve más suave que achicar el grande en cada cuadro)
   const m = mapa_mini.getContext('2d');
   m.imageSmoothingQuality = 'high';
   m.drawImage(mapa_cv, 0, 0, MAP, MAP);
 }
-// Dibuja el mapa en pantalla con los nombres de los lugares
-function mapa_dibujar_en(x0, y0, size) {
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(mapa_cv, x0, y0, size, size);
-  ctx.imageSmoothingQuality = 'low'; // lo demás (árboles) en rápido
-  const k = size / WORLD, px = Math.max(9, Math.round(size / 42)), puestos = [];
-  // Cada nombre se prueba arriba de su lugar, abajo, a la derecha y a la izquierda: va en el primero donde no choque
-  const poner = (x, y, r, nombre, col) => {
+// ---------- Lupas del mapa del pasaporte ----------
+// Como en los mapas de México con los estados chiquitos del centro: una zona con muchos lugares juntos se
+// marca en el mapa con un rectángulo punteado (sin nombres) y se ve ampliada en un recuadro aparte, con sus nombres.
+// Para agregar otra lupa basta con otra entrada aquí:
+//   titulo:  lo que dice arriba del recuadro
+//   lugares: nombres de los lugares que deben quedar dentro (la zona se calcula con ellos, así no importa
+//            que algunos, como los muelles, cambien un poco de lugar según la sección)
+//   zona:    en lugar de lugares, un rectángulo fijo del mundo { x, y, w, h }
+//   margen:  cuánto bosque se deja alrededor de los lugares (en unidades del mundo)
+//   zoom:    cuántas veces se amplía (si no cabe, se achica lo necesario)
+const MAPA_LUPAS = [
+  { titulo: 'Zona de los muelles', lugares: ['Muelle de los Sauces', 'Piedra del Tecolote', 'Muelle de las Garzas', 'Lago Espejo'], margen: 170, zoom: 2.5 },
+];
+// Rectángulo del mundo que amplía una lupa
+function lupa_zona(cfg) {
+  if (cfg.zona) return cfg.zona;
+  const ls = landmarks.filter(l => cfg.lugares.includes(l.name));
+  if (!ls.length) return null;
+  const m = cfg.margen || 150, rr2 = l => l.kind === 'pinar' ? 0 : l.r;
+  const x1 = Math.min(...ls.map(l => l.x - rr2(l))) - m, x2 = Math.max(...ls.map(l => l.x + rr2(l))) + m;
+  const y1 = Math.min(...ls.map(l => l.y - rr2(l))) - m, y2 = Math.max(...ls.map(l => l.y + rr2(l))) + m;
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+const caja_choque = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+const mapa_letra = size => Math.max(9, Math.round(size / 42));
+const lupa_titulo_alto = px => px + 10;
+// La rosa de los vientos (arriba a la izquierda del mapa): dónde va y el espacio que ocupa con sus letras
+const mapa_rosa = (x0, y0, size) => ({ cx: x0 + size * 0.09, cy: y0 + size * 0.09, r: size * 0.06 });
+function mapa_rosa_caja(x0, y0, size) { const o = mapa_rosa(x0, y0, size), d = o.r * 1.75; return [o.cx - d, o.cy - d, o.cx + d, o.cy + d]; }
+
+// Dónde va cada lupa. afuera = espacio libre a la derecha del mapa ({ x, y, w, h }) o null.
+// Si cabe afuera se pone ahí (no tapa nada); si no, en la esquina del mapa que tape menos lugares.
+function lupas_acomodar(x0, y0, size, afuera) {
+  const k = size / WORLD, px = mapa_letra(size), th = lupa_titulo_alto(px), res = [], ocupado = [mapa_rosa_caja(x0, y0, size)];
+  let ya = afuera ? afuera.y : 0;
+  for (const cfg of MAPA_LUPAS) {
+    const z = lupa_zona(cfg);
+    if (!z) continue;
+    const zr = [x0 + z.x * k, y0 + z.y * k, x0 + (z.x + z.w) * k, y0 + (z.y + z.h) * k];
+    ocupado.push(zr);
+    let w = z.w * k * cfg.zoom, caja = null;
+    if (afuera) { // a la derecha del mapa, una debajo de otra
+      w = Math.min(w, afuera.w, (afuera.y + afuera.h - ya - th) * z.w / z.h);
+      if (w >= 150) { caja = [afuera.x, ya, afuera.x + w, ya + th + w * z.h / z.w]; ya = caja[3] + 16; }
+    }
+    if (!caja) { // adentro del mapa: se prueban las 4 esquinas
+      w = Math.min(w, size * 0.45, (size * 0.36 - th) * z.w / z.h);
+      const h = th + w * z.h / z.w, m = 6;
+      let mejor = null;
+      for (const [cx, cy] of [[x0 + m, y0 + size - h - m], [x0 + size - w - m, y0 + size - h - m], [x0 + size - w - m, y0 + m], [x0 + m, y0 + m]]) {
+        const c = [cx, cy, cx + w, cy + h];
+        if (ocupado.some(o => caja_choque(c, o) > 0)) continue;
+        const tapa = landmarks.filter(l => { const lx = x0 + l.x * k, ly = y0 + l.y * k; return lx > c[0] - 10 && lx < c[2] + 10 && ly > c[1] - 10 && ly < c[3] + 10; }).length;
+        if (!mejor || tapa < mejor.tapa) mejor = { tapa, c };
+      }
+      if (!mejor) continue; // no cabe en ningún lado: esa zona se queda sin lupa (sus nombres van en el mapa)
+      caja = mejor.c;
+    }
+    ocupado.push(caja);
+    res.push({ cfg, z, zr, caja, adentro: caja[0] < x0 + size && caja[1] < y0 + size });
+  }
+  return res;
+}
+
+// Pone nombres sin que se encimen. Cada nombre va encima de su lugar (pinares, claros y el cerro) o justo al lado;
+// si se tiene que alejar, se dibuja un puntito en el lugar y una rayita hasta el nombre.
+// caja: dónde se puede escribir [x1, y1, x2, y2]; puestos: lo que ya está ocupado (se va llenando).
+function nombres_ponedor(caja, px, puestos) {
+  const sep = Math.max(2, Math.round(px * 0.3));
+  return (x, y, r, nombre, col, centrar) => {
     const w = texto_ancho(nombre, px, true) + 6, h = px + 4;
-    // (con un espacio entre nombres para que no se vean amontonados)
-    // Si no cabe en ningún lado, se prueba un poco más lejos; si de plano no cabe, va donde choque menos.
-    const sep = Math.max(2, Math.round(px * 0.3)), choque = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
     let mejor = null;
-    for (const lejos of [0, h * 1.2, h * 2.4]) {
+    for (const lejos of [0, h * 1.3, h * 2.6]) {
       const dx = r + w / 2 + 4 + lejos * 0.6, dy = r + px * 0.5 + lejos;
       const opciones = [[x, y - r - 6 - lejos], [x, y + r + px + 4 + lejos], [x + dx, y + px * 0.35], [x - dx, y + px * 0.35],
         [x + dx, y - dy], [x - dx, y - dy], [x + dx, y + dy + px], [x - dx, y + dy + px]];
+      if (centrar && !lejos) opciones.unshift([x, y + px * 0.35]);
       for (const [ox, oy] of opciones) {
-        const cx = clamp(ox, x0 + w / 2 + 2, x0 + size - w / 2 - 2), cy = clamp(oy, y0 + px + 2, y0 + size - 4);
-        const caja = [cx - w / 2 - sep, cy - px - sep, cx + w / 2 + sep, cy + 4 + sep];
-        const c = puestos.reduce((s, b) => s + choque(caja, b), 0);
-        if (!mejor || c < mejor.c) mejor = { c, cx, cy, caja };
-        if (c === 0) break;
+        const cx = clamp(ox, caja[0] + w / 2 + 2, caja[2] - w / 2 - 2), cy = clamp(oy, caja[1] + px + 2, caja[3] - 4);
+        const c = [cx - w / 2 - sep, cy - px - sep, cx + w / 2 + sep, cy + 4 + sep];
+        let choca = puestos.reduce((s, b) => s + (b.de === nombre ? 0 : caja_choque(c, b)), 0);
+        // si necesitaría rayita, que la rayita no pase por encima de otro nombre
+        for (const [rx, ry] of rayita_puntos(x, y, r, cx, cy, w, px)) if (puestos.some(b => !b.de && rx > b[0] && rx < b[2] && ry > b[1] && ry < b[3])) choca += 40;
+        if (!mejor || choca < mejor.choca) mejor = { choca, cx, cy, c };
+        if (choca === 0) break;
       }
-      if (mejor.c === 0) break;
+      if (mejor.choca === 0) break;
     }
-    puestos.push(mejor.caja);
+    puestos.push(mejor.c);
+    // ¿quedó lejos de su lugar? puntito + rayita (del lugar a la orilla más cercana del nombre)
+    const ray = rayita_puntos(x, y, r, mejor.cx, mejor.cy, w, px);
+    for (const [rx, ry] of ray) puestos.push([rx - 2, ry - 2, rx + 2, ry + 2]); // los que siguen no se ponen encima de ella
+    if (ray.length) {
+      const qx = clamp(x, mejor.cx - w / 2, mejor.cx + w / 2), qy = clamp(y, mejor.cy - px, mejor.cy + 4);
+      ctx.strokeStyle = 'rgba(58,42,20,0.8)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(qx, qy); ctx.stroke();
+      blob(x, y, Math.max(2, px * 0.22), col);
+    }
     texto_borde(mejor.cx, mejor.cy, nombre, px, col, 'rgb(255,250,235)');
   };
-  // primero los ríos (azul), luego campamento y comedor, luego lo demás
-  for (const r of rios) poner(x0 + r.etq[0] * k, y0 + r.etq[1] * k, 0, r.name, '#173f63');
+}
+// Puntos de la rayita entre un lugar (x, y, r) y su nombre (centrado en cx, cy); [] si el nombre quedó junto al lugar
+function rayita_puntos(x, y, r, cx, cy, w, px) {
+  const qx = clamp(x, cx - w / 2, cx + w / 2), qy = clamp(y, cy - px, cy + 4), d = pdist(x, y, qx, qy);
+  if (d <= r + px * 0.9) return [];
+  const n = Math.ceil(d / 4), res = [];
+  for (let i = 1; i < n; i++) res.push([x + (qx - x) * i / n, y + (qy - y) * i / n]);
+  return res;
+}
+// Lo que lleva nombre en el mapa: ríos (azul) primero, luego campamento y comedor, luego lo demás
+function mapa_nombres() {
+  const res = rios.map(r => ({ x: r.etq[0], y: r.etq[1], r: 0, name: r.name, col: '#173f63', centrar: false }));
   const orden = [...landmarks].sort((a, b) => (b.kind === 'camp' || b.kind === 'comedor') - (a.kind === 'camp' || a.kind === 'comedor'));
-  for (const l of orden) poner(x0 + l.x * k, y0 + l.y * k, l.kind === 'pinar' ? 0 : l.r * k, l.name, '#3a2a14');
+  for (const l of orden) res.push({ x: l.x, y: l.y, r: l.kind === 'pinar' ? 0 : l.r, name: l.name, col: '#3a2a14', centrar: ['pinar', 'claro', 'montana'].includes(l.kind) });
+  return res;
+}
+const en_zona = (z, x, y) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+// Rayita punteada entre dos rectángulos (de la orilla de uno a la orilla del otro)
+function lupa_union(a, b) {
+  const acx = (a[0] + a[2]) / 2, acy = (a[1] + a[3]) / 2, bcx = (b[0] + b[2]) / 2, bcy = (b[1] + b[3]) / 2;
+  const p = [clamp(bcx, a[0], a[2]), clamp(bcy, a[1], a[3])], q = [clamp(acx, b[0], b[2]), clamp(acy, b[1], b[3])];
+  ctx.setLineDash([5, 4]); ctx.strokeStyle = '#3a2a14'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); ctx.setLineDash([]);
+  // pedacitos de la raya, para que ningún nombre quede encima de ella
+  const n = Math.ceil(pdist(p[0], p[1], q[0], q[1]) / 6), res = [];
+  for (let i = 0; i <= n; i++) { const x = p[0] + (q[0] - p[0]) * i / n, y = p[1] + (q[1] - p[1]) * i / n; res.push([x - 2, y - 2, x + 2, y + 2]); }
+  return res;
+}
+// Lupita (ícono): círculo con mango
+function lupa_icono(x, y, r, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5, r * 0.35); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + r * 0.7, y + r * 0.7); ctx.lineTo(x + r * 1.7, y + r * 1.7); ctx.stroke();
+}
+// El recuadro de una lupa: título, el pedazo del mapa ampliado y los nombres de lo que queda adentro
+function lupa_dibujar(L, px, nombres) {
+  const [x1, y1, x2, y2] = L.caja, th = lupa_titulo_alto(px), z = L.z;
+  rect_redondo(x1 - 4, y1 - 4, x2 - x1 + 8, y2 - y1 + 8, 6, '#8e7a4a', 1);
+  rect(x1 - 2, y1 - 2, x2 - x1 + 4, y2 - y1 + 4, '#efe6cc');
+  rect(x1, y1, x2 - x1, th - 2, '#e2d6b4');
+  lupa_icono(x1 + px * 0.6 + 3, y1 + th / 2 - px * 0.15, px * 0.38, '#3a2a14');
+  texto(x1 + px * 1.5 + 6, y1 + th / 2 + px * 0.35, L.cfg.titulo, px, true, 'left', '#3a2a14');
+  const my = y1 + th, mw = x2 - x1, mh = y2 - my, s = MAP_RES / WORLD;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(mapa_cv, z.x * s, z.y * s, z.w * s, z.h * s, x1, my, mw, mh);
+  ctx.imageSmoothingQuality = 'low';
+  ctx.strokeStyle = '#8e7a4a'; ctx.lineWidth = 1; ctx.strokeRect(x1, my, mw, mh);
+  const kz = mw / z.w, puestos = [];
+  for (const n of nombres) { const cx = x1 + (n.x - z.x) * kz, cy = my + (n.y - z.y) * kz, b = [cx - 3, cy - 3, cx + 3, cy + 3]; b.de = n.name; puestos.push(b); }
+  const poner = nombres_ponedor([x1, my, x2, y2], px, puestos);
+  for (const n of nombres) poner(x1 + (n.x - z.x) * kz, my + (n.y - z.y) * kz, n.r * kz, n.name, n.col, n.centrar);
+}
+// Dibuja el mapa en pantalla con los nombres de los lugares y sus lupas (ver lupas_acomodar)
+function mapa_dibujar_en(x0, y0, size, lupas = []) {
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(mapa_cv, x0, y0, size, size);
+  ctx.imageSmoothingQuality = 'low'; // lo demás (árboles) en rápido
+  const k = size / WORLD, px = mapa_letra(size);
+  // en la zona de cada lupa no se escriben nombres (van en su recuadro); tampoco encima de la rosa ni de los recuadros
+  const puestos = [mapa_rosa_caja(x0, y0, size)];
+  for (const L of lupas) { puestos.push(L.zr); if (L.adentro) puestos.push([L.caja[0] - 6, L.caja[1] - 6, L.caja[2] + 6, L.caja[3] + 6]); }
+  for (const L of lupas) { // marca punteada en el mapa y la rayita hasta su recuadro
+    const [a, b, c, d] = L.zr;
+    ctx.fillStyle = 'rgba(255,250,235,0.18)'; ctx.fillRect(a, b, c - a, d - b);
+    ctx.setLineDash([6, 4]); ctx.strokeStyle = '#3a2a14'; ctx.lineWidth = 2; ctx.strokeRect(a, b, c - a, d - b); ctx.setLineDash([]);
+    puestos.push(...lupa_union(L.zr, L.caja));
+  }
+  const fuera = [], dentro = lupas.map(() => []);
+  for (const n of mapa_nombres()) {
+    const i = lupas.findIndex(L => en_zona(L.z, n.x, n.y));
+    if (i >= 0) dentro[i].push(n); else fuera.push(n);
+  }
+  // el centro de cada lugar queda libre para su puntito (ningún otro nombre se pone encima)
+  for (const n of fuera) { const cx = x0 + n.x * k, cy = y0 + n.y * k, d = 3, b = [cx - d, cy - d, cx + d, cy + d]; b.de = n.name; puestos.push(b); }
+  // los ríos, el campamento y el comedor van primero; luego los lugares que tienen más vecinos cerca (los más apretados
+  // escogen primero dónde poner su nombre, así nadie se queda con un lugar lejos y una rayita larga)
+  const vecinos = n => fuera.filter(o => o !== n && pdist(o.x, o.y, n.x, n.y) < 900).length;
+  const fijo = n => rios.some(r => r.name === n.name) || n.name === 'Campamento' || n.name === 'Comedor';
+  fuera.sort((a, b) => (fijo(b) - fijo(a)) || (vecinos(b) - vecinos(a)));
+  const poner = nombres_ponedor([x0, y0, x0 + size, y0 + size], px, puestos);
+  for (const n of fuera) poner(x0 + n.x * k, y0 + n.y * k, n.r * k, n.name, n.col, n.centrar);
+  lupas.forEach((L, i) => lupa_dibujar(L, px, dentro[i]));
 }
 // Una punta de la rosa de los vientos: mitad clara y mitad oscura
 function rosa_punta(cx, cy, ang, len, w, claro, oscuro) {
@@ -491,10 +640,24 @@ function pasaporte_dibujar() {
     : '1-3 o flechas: cambiar de hoja · ' + nombre_tecla(settings.binds.mapa) + ' o Esc: cerrar', 13 * k, false, 'center', gris);
 }
 function pasaporte_mapa(ax, ay, aw, ah) {
-  const size = Math.min(aw, ah), x = ax + (aw - size) / 2;
+  // Las lupas van fuera del mapa si caben de al menos 2x: a la derecha (pantallas anchas; el mapa se achica un poco
+  // si hace falta) o abajo (celular parado). Si no caben, van adentro del mapa, en una esquina (ver lupas_acomodar).
+  const zs = MAPA_LUPAS.map(lupa_zona).filter(z => z);
+  const f = Math.max(0, ...zs.map(z => z.w / WORLD)), fh = zs.reduce((t, z) => t + z.h / WORLD * 2 + 0.08, 0);
+  let size = Math.min(aw, ah), x = ax + (aw - size) / 2, afuera = null;
+  const chico = Math.min(ah, (aw - 24) / (1 + 2 * f));
+  if (f > 0 && ah - size >= Math.max(150, fh * size)) { // abajo
+    afuera = { x, y: ay + size + 20, w: size, h: ah - size - 20 };
+  } else if (f > 0 && chico >= size * 0.85) { // a la derecha
+    size = Math.min(size, chico);
+    const libre = aw - size;
+    x = ax + Math.max(0, (libre - 330) / 2);
+    afuera = { x: x + size + 24, y: ay + 4, w: ax + aw - (x + size + 24) - 4, h: size - 8 };
+  }
   rect_redondo(x - 5, ay - 5, size + 10, size + 10, 8, '#d8cfb4', 1);
-  mapa_dibujar_en(x, ay, size);
-  rosa_vientos(x + size * 0.09, ay + size * 0.09, size * 0.06, size > 300);
+  mapa_dibujar_en(x, ay, size, lupas_acomodar(x, ay, size, afuera));
+  const ro = mapa_rosa(x, ay, size);
+  rosa_vientos(ro.cx, ro.cy, ro.r, size > 300);
 }
 // Un sello redondo (girado), como los que ponen en cada base
 function sello_dibujar(cx, cy, r, f) {
