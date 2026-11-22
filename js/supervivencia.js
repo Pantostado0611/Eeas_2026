@@ -33,12 +33,17 @@ function cerca_de_algo() {
     if (!fire.lit) return { kind: 'fire', label: u + 'Prender la fogata' };
     return { kind: 'fire', label: wood > 0 ? u + 'Echar leña' : 'Necesitas leña' };
   }
+  // En el muelle (perchero de chalecos y canoa): gana lo que estás mirando (lo más centrado en la pantalla);
+  // si empatan, lo más cercano. 'Dejar el chaleco' solo sale mirando directo al perchero.
   const m = muelle_cerca();
   if (m) {
-    const dr = dist(player, m.rack), da = dist(player, m.abordar);
-    if (!chaleco && dr < 95) return { kind: 'chaleco', obj: m, label: u + 'Ponerte el chaleco salvavidas' };
-    if (chaleco && dr < 70 && dr <= da) return { kind: 'chaleco', obj: m, label: u + 'Dejar el chaleco' };
-    if (da < 75) return { kind: 'canoa', obj: m, label: u + 'Subirte a la canoa' };
+    const ops = [], dr = dist(player, m.rack), da = dist(player, m.abordar);
+    const giro = p => Math.abs(Math.atan2(Math.sin(Math.atan2(p.y - player.y, p.x - player.x) - player.ang), Math.cos(Math.atan2(p.y - player.y, p.x - player.x) - player.ang)));
+    if (!chaleco && dr < 95 && (dr < 30 || giro(m.rack) < 0.8)) ops.push({ a: giro(m.rack), d: dr, n: { kind: 'chaleco', obj: m, label: u + 'Ponerte el chaleco salvavidas' } });
+    if (chaleco && dr < 70 && giro(m.rack) < 0.35) ops.push({ a: giro(m.rack), d: dr, n: { kind: 'chaleco', obj: m, label: u + 'Dejar el chaleco' } });
+    if (da < 75 && (da < 30 || giro(m.agua) < 0.9)) ops.push({ a: giro(m.agua), d: da, n: { kind: 'canoa', obj: m, label: u + 'Subirte a la canoa' } });
+    ops.sort((p, q) => (Math.abs(p.a - q.a) < 0.12 ? p.d - q.d : p.a - q.a));
+    if (ops.length) return ops[0].n;
   }
   return null;
 }
@@ -338,8 +343,10 @@ function rio_actualizar(dt) {
   else c.v *= 0.3;
   player.x = c.x; player.y = c.y; player.ang = c.ang; player.moving = false;
   // llegar al muelle de enfrente (o regresar al mismo)
+  // (al muelle de salida solo se "regresa" si antes ya te alejaste: 1.5 veces el radio de llegada)
+  if (!c.salio && dist(c, c.desde.agua) > 165 && dist(c, c.desde.abordar) > 145) c.salio = true;
   for (const m of muelles) {
-    if (m === c.desde && c.t < 3) continue;
+    if (m === c.desde && !c.salio) continue;
     if (dist(c, m.agua) < 110 || dist(c, m.abordar) < 95) { canoa_bajar(m); return; }
   }
 }

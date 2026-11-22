@@ -567,7 +567,12 @@ function comedor_suelo_dibujar() {
 // Letrero de la entrada (dibujo parado)
 function comedor_visibles() {
   if (!comedor || adentro) return;
-  agregar_visible(comedor.x + 110, comedor.y0 - 70, sprs.letrero_comedor, 90, 70);
+  if (player.y < comedor.y1) agregar_visible(comedor.x + 110, comedor.y0 - 70, sprs.letrero_comedor, 90, 70); // (desde el río lo tapa el edificio)
+  // encima de las dos puertas (la del campamento y la del porche): "Comedor" con una flecha hacia la entrada
+  const c = comedor;
+  // (cada uno solo si estás de su lado: las paredes no tapan los dibujos parados)
+  if (player.y < c.y0) agregar_visible(c.x, c.y0 - 14, sprs.letrero_entrada, 112, 40, c.puerta_alto + 2);
+  if (player.y > c.y1) agregar_visible((c.puerta_sur[0] + c.puerta_sur[1]) / 2, c.y1 + 14, sprs.letrero_entrada, 112, 40, c.puerta_alto + 2);
 }
 
 // Por dentro: se dibuja el salón en vez del bosque
@@ -664,7 +669,19 @@ function pintar_letrero_comedor(g, w, h) {
   g.font = fuente(h * 0.2, true); g.fillStyle = '#ffe9b0'; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText('Comedor', w / 2, h * 0.25);
 }
+// Letrero de encima de la puerta: tabla con "COMEDOR" y una flecha hacia abajo que dice "Entrada"
+function pintar_letrero_entrada(g, w, h) {
+  caja_redonda(g, 0, 0, w, h, 6, '#6b4a2b'); caja_redonda(g, 3, 3, w - 3, h - 3, 4, '#8a5a30');
+  g.font = fuente(h * 0.36, true); g.fillStyle = '#ffe9b0'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('COMEDOR', w * 0.42, h * 0.33);
+  g.font = fuente(h * 0.26, true); g.fillText('Entrada', w * 0.42, h * 0.74);
+  // flecha hacia abajo (hacia la puerta)
+  const ax = w * 0.86;
+  caja(g, ax - w * 0.025, h * 0.18, ax + w * 0.025, h * 0.6, '#ffe9b0');
+  tri(g, ax - w * 0.075, h * 0.55, ax + w * 0.075, h * 0.55, ax, h * 0.88, '#ffe9b0');
+}
 function comedor_sprites() {
+  sprs.letrero_entrada = sprite_pintado(140, 50, pintar_letrero_entrada);
   sprs.mecedora = sprite_pintado(44, 58, pintar_mecedora);
   sprs.lampara = sprite_pintado(22, 60, pintar_lampara);
   sprs.estandarte = sprite_pintado(46, 130, pintar_estandarte);

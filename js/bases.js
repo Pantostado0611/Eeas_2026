@@ -48,13 +48,20 @@ function pick_ref(f) {
 // Lugar desde donde se cuentan los pasos ahora (Rover)
 function cur_ref() { const f = base_sin_marcar(); return f && f.unlocked ? f.ref : null; }
 
+// Lobezno y Tropero: más o menos cuántos pasos hay del lugar a la base (con los mismos pasos que cuenta el Rover),
+// redondeados de 5 en 5 (o de 10 en 10 si son más de 50). En lagos, claros, pinares y el cerro se cuenta desde la orilla.
+function pasos_aprox(l, f) {
+  const orilla = ['lago', 'claro', 'pinar', 'montana'].includes(l.kind) ? l.r : 0;
+  const p = Math.max(0, dist(l, f) - orilla) / STEP, m = p > 50 ? 10 : 5;
+  return 'unos ' + Math.max(5, Math.round(p / m) * m) + ' pasos ';
+}
 function flag_hint(f) {
   if (f.cima && cat.hint !== 'ruta') return 'en la cima ' + con_art('de', { art: 'el', name: montana.name }) + ' (sube por el camino)';
   const l = f.lm;
   if (!l) return '';
   switch (cat.hint) {
-    case '4': return 'al ' + dir_name4(l, f) + ' ' + con_art('de', l);
-    case '8': return 'al ' + dir_name(l, f) + ' ' + con_art('de', l);
+    case '4': return pasos_aprox(l, f) + 'al ' + dir_name4(l, f) + ' ' + con_art('de', l);
+    case '8': return pasos_aprox(l, f) + 'al ' + dir_name(l, f) + ' ' + con_art('de', l);
     case 'ruta': return f.route ? f.route.deg + '° y ' + f.route.steps + ' pasos ' + con_art('desde', f.ref) : '';
   }
   return 'a ' + bearing(l, f) + '° ' + con_art('de', l);
@@ -78,7 +85,9 @@ function target() {
 const RETO_WORDS = ['FOGATA', 'BRUJULA', 'TIENDA', 'MOCHILA', 'LINTERNA', 'BOSQUE', 'NUDO', 'PATRULLA', 'MAPA', 'LAGO',
   'ARBOL', 'ESTRELLA', 'LUNA', 'AGUILA', 'LOBO', 'SCOUT', 'TROPA', 'MANADA', 'RUTA', 'HUELLA', 'CUERDA', 'NORTE',
   'FUEGO', 'AVENTURA', 'CAMPAMENTO', 'SIEMPRE LISTOS', 'BUENA ACCION', 'RIO', 'SOL', 'CANTIMPLORA',
-  'BUEN CAMINO', 'LUNA LLENA', 'NUDO MARINO', 'ESTRELLA POLAR', 'FUEGO VIVO'];
+  'BUEN CAMINO', 'LUNA LLENA', 'NUDO MARINO', 'ESTRELLA POLAR', 'FUEGO VIVO', 'PANOLETA', 'SENDERO', 'PROMESA', 'INSIGNIA',
+  'SILBATO', 'BASTON', 'CABUYERIA', 'HACHA', 'SERVICIO', 'LEY SCOUT', 'FLOR DE LIS', 'GUIA', 'REMO', 'CANOA', 'MONTE'];
+// (sin Ñ ni acentos: las claves solo tienen de la A a la Z)
 const MORSE = { A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.', H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--',
   N: '-.', O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-', V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..' };
 const CENIT = { C: 'P', P: 'C', E: 'O', O: 'E', N: 'L', L: 'N', I: 'A', A: 'I', T: 'R', R: 'T' };
@@ -104,20 +113,21 @@ function cifrar(key, w) {
 const reto_con_opciones = () => cat.hint === '4' || cat.hint === '8';   // Manada y Tropa eligen entre 4
 const opciones_largas = c => reto_con_opciones() && c.form === 'cif' && (c.key === 'morse' || c.key === 'numeros');
 
-// Reto nuevo para la base; si ya hubo uno, sale otro distinto (otra palabra, otra clave o al revés)
+// Reto nuevo para la base; si ya hubo uno, sale otro distinto (otra palabra; a veces la misma clave o al revés).
+// En toda la partida no se repite ninguna palabra (ni en otra base ni al volver a intentar).
 function nuevo_reto(f) {
   const last = f.used[f.used.length - 1];
+  const usadas = new Set(flags.flatMap(b => b.used.map(u => u.word)));
   let c;
-  for (let t = 0; t < 60; t++) {
+  for (let t = 0; t < 80; t++) {
     c = { key: elegir(CLAVE_KEYS), word: elegir(RETO_WORDS), form: 'des' };
     if (last) {
       const v = irandom(2);
       if (v === 0) { c.key = last.key; c.form = last.form; }
-      if (v === 1) { c.word = last.word; c.form = last.form; }
-      if (v === 2) { c.key = last.key; c.form = last.form === 'des' ? 'cif' : 'des'; }
+      if (v === 1) { c.key = last.key; c.form = last.form === 'des' ? 'cif' : 'des'; }
     }
-    if (opciones_largas(c) && c.word.length > 6 && t < 50) continue; // no caben en los botones
-    if (!f.used.some(u => u.key === c.key && u.word === c.word && u.form === c.form)) break;
+    if (opciones_largas(c) && c.word.length > 6 && t < 60) continue; // no caben en los botones
+    if (!usadas.has(c.word) || t >= 70) break; // (si de plano ya se usaron todas, se repite alguna)
   }
   f.used.push({ key: c.key, word: c.word, form: c.form });
   const enc = cifrar(c.key, c.word);
@@ -128,7 +138,9 @@ function nuevo_reto(f) {
     const parecido = w => (pal(w) === pal(c.word) ? 0 : 10) + Math.abs(w.length - c.word.length) + (w[0] === c.word[0] ? 0 : 1.5) + Math.random() * 2;
     const otras = RETO_WORDS.filter(w => w !== c.word && cifrar(c.key, w) !== enc && (!opciones_largas(c) || w.length <= 6))
       .map(w => [w, parecido(w)]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
-    c.options = mezclar([c.word, otras[0], otras[1], otras[2]]).map(o => c.form !== 'des' ? cifrar(c.key, o) : o);
+    // las incorrectas se escogen al azar entre las 8 más parecidas (así no salen siempre las mismas)
+    const tres = mezclar(otras.slice(0, 8)).slice(0, 3);
+    c.options = mezclar([c.word, ...tres]).map(o => c.form !== 'des' ? cifrar(c.key, o) : o);
   }
   return c;
 }

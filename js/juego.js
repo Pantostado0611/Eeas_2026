@@ -61,6 +61,7 @@ function empezar_juego() {
   playTime = 0;
   state = 'play';
   toast('Primero prende la fogata: acércate y presiona ' + tecla_entre_corchetes('usar') + '.', 7);
+  tuto_empezar(); // mini tutorial (solo si nunca lo has visto)
 }
 
 // ---------- Actualización de cada cuadro ----------
@@ -101,6 +102,7 @@ function actualizar(dt) {
   if (state === 'menu') { menu_actualizar(); return; }
   if (state === 'botones') { editor_actualizar(); return; }
   if (state !== 'play') return;
+  tuto_actualizar();
 
   // ---------- Ventanitas: con el reto o la libreta abiertos, el juego se pausa ----------
   if (reveal) { revisar_libreta(dt); return; }
@@ -203,6 +205,7 @@ function dibujar() {
   if (state === 'play') comedor_vista_dibujar(); // la charola en tus manos (debajo de los mensajes)
   if (state === 'title') titulo_dibujar(); else if (state === 'creditos') creditos_dibujar(); else hud_dibujar();
   if (state === 'play') tactil_dibujar(); // botones del celular (no salen en el menú ni en las ventanitas)
+  if (state === 'play' && !reto && !book && !prender && !reveal && !(canoa && canoa.manual)) tuto_dibujar();
   if (state === 'play' && canoa && canoa.manual) canoa_manual_dibujar();
   if (state === 'play' && mapa_abierto) pasaporte_dibujar();
   if (state === 'play' && book) libreta_dibujar();
