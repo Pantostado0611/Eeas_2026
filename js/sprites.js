@@ -157,6 +157,8 @@ function sprites_crear() {
   if (IMGS.arbol) sprs.arbol = [sprite_imagen(IMGS.arbol, false, 'brightness(0.93) hue-rotate(-10deg)'), sprite_imagen(IMGS.arbol), sprite_imagen(IMGS.arbol, true, 'brightness(1.08) hue-rotate(6deg)')];
   sprs.pine = [0, 1, 2].map(i => sprite_pintado(110, 260, (g, w, h) => pintar_pino(g, w, h, 17 + i * 4)));
   sprs.giant = sprite_pintado(300, 460, (g, w, h) => pintar_roble(g, w, h, 100, 24));
+  // el Árbol Gigante dibujado a mano: la misma copa del árbol en grandote + su tronco
+  if (IMGS.gigante) sprs.gigante = sprite_imagen(IMGS.gigante);
   sprs.rock = [0.13, 0.57].map(s => sprite_pintado(110, 70, (g, w, h) => pintar_roca(g, w, h, s)));
   sprs.tent = ['#d9813b', '#3b7bd9', '#c9b13a'].map(c => sprite_pintado(120, 80, (g, w, h) => pintar_tienda(g, w, h, c)));
   sprs.flag = [false, true].map(d => [1, 2, 3, 4, 5].map(n => sprite_pintado(60, 140, (g, w, h) => pintar_bandera(g, w, h, d, n))));
