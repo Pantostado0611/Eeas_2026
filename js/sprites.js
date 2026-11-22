@@ -21,6 +21,23 @@ function sprite_pintado(w, h, pintar) {
   }
   return { levels, w, h };
 }
+// Dibujos hechos a mano (pixel art, en img/). Se cargan antes de arrancar.
+const IMGS = {};
+function imagenes_cargar(nombres) {
+  return Promise.all(nombres.map(n => new Promise(ok => {
+    const im = new Image(); im.onload = () => { IMGS[n] = im; ok(); }; im.onerror = () => ok(); im.src = 'img/' + n + '.png';
+  })));
+}
+// Sprite a partir de un dibujo a mano (espejo = volteado); pixel = que de cerca no se vea borroso
+function sprite_imagen(im, espejo = false) {
+  const s = sprite_pintado(im.width, im.height, (g, w, h) => {
+    g.imageSmoothingEnabled = false;
+    if (espejo) { g.translate(w, 0); g.scale(-1, 1); }
+    g.drawImage(im, 0, 0);
+  });
+  s.pixel = true;
+  return s;
+}
 const tri = (g, x1, y1, x2, y2, x3, y3, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.lineTo(x3, y3); g.fill(); };
 const elipse = (g, x1, y1, x2, y2, col) => { g.fillStyle = col; g.beginPath(); g.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, 7); g.fill(); };
 const caja = (g, x1, y1, x2, y2, col) => { g.fillStyle = col; g.fillRect(x1, y1, x2 - x1, y2 - y1); };
@@ -142,6 +159,9 @@ function sprites_crear() {
   sprs.tuft = [0, 1, 2].map(k => sprite_pintado(24, 22, (g, w, h) => pintar_mata(g, w, h, k)));
   sprs.chalecos = sprite_pintado(90, 80, pintar_chalecos);
   sprs.rescatista = sprite_pintado(50, 80, pintar_rescatista);
+  // el salvavidas dibujado a mano (con su bote): de lado (y volteado) y de frente
+  if (IMGS['rescatista-lado'] && IMGS['rescatista-frente'])
+    sprs.salvavidas = { lado: sprite_imagen(IMGS['rescatista-lado']), lado_espejo: sprite_imagen(IMGS['rescatista-lado'], true), frente: sprite_imagen(IMGS['rescatista-frente']) };
   sprs.poste = sprite_pintado(16, 50, pintar_poste);
   sprs.coyote = sprite_pintado(50, 46, pintar_coyote);
   sprs.cascada = sprite_pintado(260, 230, pintar_cascada);

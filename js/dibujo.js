@@ -194,7 +194,9 @@ function dibujar_mundo() {
     else {
       const kx = w / it.spr.w, ky = h / it.spr.h;
       ctx.globalAlpha = alpha;
+      if (it.spr.pixel && L === 0) ctx.imageSmoothingEnabled = false; // pixel art nítido de cerca
       ctx.drawImage(it.spr.levels[L], it.sx - w / 2 - PAD * kx, bottom - h - PAD * ky, w + PAD * 2 * kx, h + PAD * 2 * ky);
+      ctx.imageSmoothingEnabled = true;
     }
   }
   ctx.globalAlpha = 1;
@@ -276,7 +278,7 @@ function rio_suelo_dibujar() {
     const usada = (canoa && canoa.desde === m) || (rescate && rescate.desde === m);
     if (!usada) canoa_suelo(m.cx + m.ox * (m.w - 30) + m.tx * 58, m.cy + m.oy * (m.w - 30) + m.ty * 58, m.ox, m.oy, '#b5462e');
   }
-  for (let i = 0; i < rios.length; i++) { const s = seguridad_pos(i); canoa_suelo(s.x, s.y, s.ax, s.ay, '#e8692a'); }
+  if (!sprs.salvavidas) for (let i = 0; i < rios.length; i++) { const s = seguridad_pos(i); canoa_suelo(s.x, s.y, s.ax, s.ay, '#e8692a'); }
   if (canoa && !canoa.manual) { // aro naranja donde llegas
     const a = canoa.desde.otro.agua, w = [];
     for (let i = 0; i < 24; i++) { const t = i / 24 * PI * 2; w.push(a.x + Math.cos(t) * 70, a.y + Math.sin(t) * 70); }
@@ -287,7 +289,15 @@ function rio_suelo_dibujar() {
 // Chalecos colgados y la persona de la canoa de seguridad (dibujos parados)
 function rio_visibles() {
   for (const m of muelles) agregar_visible(m.rack.x, m.rack.y, sprs.chalecos, 80, 72);
-  for (let i = 0; i < rios.length; i++) { const s = seguridad_pos(i); agregar_visible(s.x, s.y, sprs.rescatista, 34, 56); }
+  for (let i = 0; i < rios.length; i++) {
+    const s = seguridad_pos(i), sv = sprs.salvavidas;
+    if (!sv) { agregar_visible(s.x, s.y, sprs.rescatista, 34, 56); continue; }
+    // Según desde dónde lo veas: de frente (o de espaldas) o de lado, con la punta del bote hacia donde apunta
+    const dx = s.x - player.x, dy = s.y - player.y, d = Math.hypot(dx, dy) || 1;
+    const de_frente = Math.abs((s.ax * dx + s.ay * dy) / d) > 0.75;
+    const spr = de_frente ? sv.frente : (-s.ax * cam_sn + s.ay * cam_cs > 0 ? sv.lado : sv.lado_espejo);
+    agregar_visible(s.x, s.y, spr, 77, 90, -5); // un poquito hundido en el agua
+  }
 }
 
 // ---------- Montaña en 3D y cascada ----------

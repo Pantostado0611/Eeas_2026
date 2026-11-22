@@ -254,5 +254,6 @@ function arrancar() {
   requestAnimationFrame(ciclo);
 }
 ctx.fillStyle = '#1d2b1a'; ctx.fillRect(0, 0, W, H);
-Promise.all(['16px "Open Sans"', 'bold 16px "Open Sans"', '16px "Droid Sans Mono"'].map(f => document.fonts.load(f)))
+Promise.all([...['16px "Open Sans"', 'bold 16px "Open Sans"', '16px "Droid Sans Mono"'].map(f => document.fonts.load(f)),
+  imagenes_cargar(['rescatista-lado', 'rescatista-frente'])])
   .catch(() => {}).finally(arrancar);
