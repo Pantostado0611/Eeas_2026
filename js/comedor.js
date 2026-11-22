@@ -43,24 +43,24 @@ function siguiente_comida_texto() {
 }
 
 // ---------- Forma del edificio ----------
-// Mide 600 x 380 y la puerta mira al norte (hacia el campamento). Adentro, la pared de la cocina está en x1 - 100.
+// Mide 900 x 540 y la puerta mira al norte (hacia el campamento). Adentro, la pared de la cocina está en x1 - 100.
 function comedor_crear() {
-  const cx = camp.x, cy = camp.y + 560, W2 = 300, D2 = 190;
+  const cx = camp.x, cy = camp.y + 640, W2 = 450, D2 = 270;
   const c = comedor = {
     x: cx, y: cy, x0: cx - W2, x1: cx + W2, y0: cy - D2, y1: cy + D2,
-    alto: 120, techo: 175, puerta: 50, puerta_alto: 100, porche: 120, xk: cx + 200,
-    radio: Math.hypot(W2, D2 + 120), fuera: [], dentro_paredes: [], dentro_cosas: [],
+    alto: 140, techo: 210, puerta: 50, puerta_alto: 100, porche: 130, xk: cx + 350,
+    radio: Math.hypot(W2, D2 + 130), fuera: [], dentro_paredes: [], dentro_cosas: [],
     ventanillas: [], mesas: [], muros: [], mecedoras: [], lamparas: [],
   };
   const { x0, x1, y0, y1, alto, techo, xk } = c;
   // Ventanillas en la pared de la cocina (de la puerta hacia el fondo)
-  [['devolucion', 'Devolución', -150], ['charolas', 'Charolas', -70], ['comida', 'Comida', 10], ['agua', 'Agua y raciones', 90]]
+  [['devolucion', 'Devolución', -190], ['charolas', 'Charolas', -90], ['comida', 'Comida', 10], ['agua', 'Agua y raciones', 110]]
     .forEach(([tipo, name, v], i) => c.ventanillas.push({ tipo, name, y: cy + v, x: xk - 60, idx: i }));
-  // Mesas largas con bancas (2 filas de 2)
-  for (const mv of [-60, 110]) for (const mu of [-160, 50]) c.mesas.push({ x: cx + mu, y: cy + mv, hw: 65, hd: 20 });
+  // Mesas largas con bancas (3 filas de 3; pasillo en medio desde la puerta y otro frente a las ventanillas)
+  for (const mv of [-150, 0, 150]) for (const mu of [-290, -130, 110]) c.mesas.push({ x: cx + mu, y: cy + mv, hw: 65, hd: 20 });
   // Mecedoras frente a la chimenea y lámparas colgando
-  c.mecedoras = [{ x: x0 + 45, y: cy - 55 }, { x: x0 + 45, y: cy + 55 }];
-  for (const mu of [-190, -40, 110]) for (const mv of [-90, 80]) c.lamparas.push({ x: cx + mu, y: cy + mv });
+  c.mecedoras = [{ x: x0 + 48, y: cy - 75 }, { x: x0 + 48, y: cy + 75 }];
+  for (const mu of [-290, -130, 110]) for (const mv of [-75, 75]) c.lamparas.push({ x: cx + mu, y: cy + mv });
 
   // Muros para chocar (rectángulos [x0, y0, x1, y1]); la puerta es un hueco en la pared norte
   const g = 6;
@@ -69,14 +69,14 @@ function comedor_crear() {
     [xk - 30, y0, xk + g, y1],                                                         // pared de la cocina (con su repisa)
     [x0, cy - 70, x0 + 30, cy + 70]);                                                  // chimenea
   for (const m of c.mesas) c.muros.push([m.x - m.hw, m.y - m.hd - 22, m.x + m.hw, m.y + m.hd + 22]); // mesa y bancas
-  for (let k = 0; k < 3; k++) { const mx = x0 + 110 + k * 190, my = y1 + 62; c.muros.push([mx - 45, my - 32, mx + 45, my + 32]); } // mesas del porche
+  for (let k = 0; k < 4; k++) { const mx = x0 + 120 + k * 220, my = y1 + 66; c.muros.push([mx - 45, my - 32, mx + 45, my + 32]); } // mesas del porche
   comedor_caras_crear();
 }
 const comedor_zona = () => comedor ? [{ x: comedor.x, y: comedor.y + comedor.porche / 2, r: comedor.radio + 20 }] : [];
 // Postes del porche (se chocan como los árboles)
 function comedor_postes() {
   const c = comedor, res = [];
-  for (let k = 0; k < 6; k++) res.push({ x: c.x0 + 20 + k * (c.x1 - c.x0 - 40) / 5, y: c.y1 + c.porche, r: 8 });
+  for (let k = 0; k < 7; k++) res.push({ x: c.x0 + 20 + k * (c.x1 - c.x0 - 40) / 6, y: c.y1 + c.porche, r: 8 });
   return res;
 }
 // ¿(x, y) está dentro del salón?
@@ -98,9 +98,12 @@ function comedor_tapa(x1, y1, x2, y2) {
 // ---------- Caras 3D (paredes, techo, mesas...) ----------
 // p: puntos [x, y, h, ...] (convexo); col: [r,g,b] o función que lo da; n: hacia dónde mira (null = de los dos lados)
 function cara(lista, p, col, n, sesgo = 0) {
-  const N = p.length / 3; let cx = 0, cy = 0, ch = 0;
-  for (let i = 0; i < N; i++) { cx += p[i * 3]; cy += p[i * 3 + 1]; ch += p[i * 3 + 2]; }
-  const o = { p, col: typeof col === 'string' ? hex_rgb(col) : col, n, cx: cx / N, cy: cy / N, ch: ch / N, sesgo, hijos: [] };
+  const N = p.length / 3; let cx = 0, cy = 0, ch = 0, xa = Infinity, ya = Infinity, xb = -Infinity, yb = -Infinity;
+  for (let i = 0; i < N; i++) {
+    const x = p[i * 3], y = p[i * 3 + 1]; cx += x; cy += y; ch += p[i * 3 + 2];
+    xa = Math.min(xa, x); xb = Math.max(xb, x); ya = Math.min(ya, y); yb = Math.max(yb, y);
+  }
+  const o = { p, col: typeof col === 'string' ? hex_rgb(col) : col, n, cx: cx / N, cy: cy / N, ch: ch / N, sesgo, hijos: [], bb: [xa, ya, xb, yb] };
   lista.push(o);
   return o;
 }
@@ -200,12 +203,12 @@ function comedor_caras_crear() {
   const c = comedor, { x0, x1, y0, y1, alto, techo, xk } = c, cx = c.x, cy = c.y, P = c.puerta, PA = c.puerta_alto, D2 = cy - y0;
   const VA = 32, VB = 80; // altura de las ventanas: de 32 a 80 (como de 0.9 a 2.3 m)
   // ventanas (entre las columnas de adentro); las de la cocina solo se ven por fuera
-  const v_norte = [[cx - 228, cx - 142], [cx - 118, cx - 62], [cx + 102, cx + 188]];
-  const v_sur = [[cx - 228, cx - 142], [cx - 118, cx - 32], [cx - 8, cx + 78]];
-  const puertas_sur = [cx + 110, cx + 180];              // puertas de vidrio al porche
-  const v_cocina = [cx + 222, cx + 280];
-  const v_oeste = [[cy - 150, cy - 90], [cy + 90, cy + 150]];
-  const columnas = [cx - 240, cx - 130, cx + 90];         // columnas verdes (y vigas del techo)
+  const v_norte = [[cx - 432, cx - 328], [cx - 292, cx - 188], [cx - 150, cx - 80], [cx + 108, cx + 202], [cx + 238, cx + 332]];
+  const v_sur = [[cx - 432, cx - 328], [cx - 292, cx - 188], [cx - 150, cx - 40], [cx - 10, cx + 70], [cx + 238, cx + 332]];
+  const puertas_sur = [cx + 115, cx + 195];              // puertas de vidrio al porche
+  const v_cocina = [cx + 372, cx + 430];
+  const v_oeste = [[cy - 215, cy - 120], [cy + 120, cy + 215]];
+  const columnas = [cx - 310, cx - 170, cx + 90, cx + 220]; // columnas verdes (y vigas del techo)
 
   // ----- Por fuera -----
   const F = c.fuera, lad = '#a8714a', lad_s = '#b8805a', lad_l = '#9c6a46', lam = '#8e9499', lam2 = '#7d8388', marco = '#4a3a2a';
@@ -231,7 +234,7 @@ function comedor_caras_crear() {
     lineas_triangulo(w.hijos, x, cy, D2, alto, techo, 8, '#6f6250');
   }
   for (const [a, b] of v_oeste) ventana(oeste.hijos, 'x', x0, a, b, VA, VB, vidrio_fuera, marco);
-  ventana(este.hijos, 'x', x1, cy + 40, cy + 120, VA, VB, vidrio_fuera, marco);
+  ventana(este.hijos, 'x', x1, cy + 60, cy + 170, VA, VB, vidrio_fuera, marco);
   // techo de lámina (sale un poquito de las paredes) con sus canales y la tira de vidrio de arriba
   const e = 18;
   const tn = cara(F, [x0 - e, y0 - e, alto - 6, x1 + e, y0 - e, alto - 6, x1 + e, cy, techo, x0 - e, cy, techo], lam, [0, -(techo - alto + 6), cy - y0 + e]);
@@ -248,8 +251,8 @@ function comedor_caras_crear() {
   const tablas = [];
   for (let x = x0 + 16; x < x1; x += 16) tablas.push([x - 0.8, y1, ph, x + 0.8, y1, ph, x + 0.8, py, ph - 6, x - 0.8, py, ph - 6]);
   multi(pt.hijos, tablas, () => ojo > ph ? hex_rgb('#7d8388') : hex_rgb('#a57a48'));
-  for (let k = 0; k < 3; k++) {
-    const mx = x0 + 110 + k * 190, my = y1 + 62;
+  for (let k = 0; k < 4; k++) {
+    const mx = x0 + 120 + k * 220, my = y1 + 66;
     caja3(F, mx - 45, my - 14, mx + 45, my + 14, 26, 31, '#9a2a2a', '#7a2020');
     caja3(F, mx - 45, my - 32, mx + 45, my - 24, 15, 18, '#9a2a2a', '#7a2020');
     caja3(F, mx - 45, my + 24, mx + 45, my + 32, 15, 18, '#9a2a2a', '#7a2020');
@@ -281,7 +284,7 @@ function comedor_caras_crear() {
   const dw = cara(D, [x0, y0, 0, x0, y1, 0, x0, y1, alto, x0, cy, techo, x0, y0, alto], crema2, [1, 0, 0]);
   lambrin_en(dw.hijos, 'x', x0, y0, y1);
   for (const [a, b] of v_oeste) ventana(dw.hijos, 'x', x0, a, b, VA, VB, vidrio_dentro, marco_d);
-  columnas_en(dw.hijos, 'x', x0, [cy - 175, cy + 175]);
+  columnas_en(dw.hijos, 'x', x0, [cy - 235, cy - 95, cy + 95, cy + 235]);
   // piso de concreto pulido con sus juntas
   const piso = cara(D, [x0, y0, 0, xk, y0, 0, xk, y1, 0, x0, y1, 0], '#cfc9bd', [0, 0, 1]);
   const juntas = [];
@@ -336,8 +339,8 @@ function comedor_caras_crear() {
   // ----- Por dentro: cosas del salón -----
   const K = c.dentro_cosas, ladrillo = '#b07a52';
   // chimenea de ladrillo con la flor de lis (pared oeste)
-  const ch = caja3(K, x0, cy - 70, x0 + 28, cy + 70, 0, 165, ladrillo, ladrillo);
-  ladrillos(ch.e.hijos, 'x', x0 + 28, cy - 70, cy + 70, 0, 165, ladrillo);
+  const ch = caja3(K, x0, cy - 70, x0 + 28, cy + 70, 0, 190, ladrillo, ladrillo);
+  ladrillos(ch.e.hijos, 'x', x0 + 28, cy - 70, cy + 70, 0, 190, ladrillo);
   pared_x(ch.e.hijos, x0 + 28.5, cy - 26, cy + 26, 0, 40, '#2a1f16', 1);       // hueco del fuego
   pared_x(ch.e.hijos, x0 + 29, cy - 30, cy + 30, 40, 46, '#8c867a', 1);        // repisa
   flor_de_lis_x(ch.e.hijos, x0 + 29, cy, 108, 1, '#2a1f16', 1, 0);
@@ -508,7 +511,9 @@ function cara_dibujar(it) {
     ctx.fill('nonzero');
   };
   pintar(it.c);
-  for (const h of it.c.hijos) if (!h.detalle || it.d < 320) pintar(h);
+  // el detalle (ladrillos) solo si el pedazo de pared más cercano está a menos de 380
+  const bb = it.c.bb, cerca = !bb || pdist(player.x, player.y, clamp(player.x, bb[0], bb[2]), clamp(player.y, bb[1], bb[3])) < 380;
+  for (const h of it.c.hijos) if (!h.detalle || cerca) pintar(h);
 }
 // Por fuera: entra a la lista de lo que se ve como una sola cosa (como el cerro)
 function comedor_agregar() {
@@ -564,8 +569,8 @@ function comedor_interior_dibujar() {
     cosas.push({ d: Math.hypot(dx, dy), spr: { spr, w, h, alt, z, sc, sx } });
   };
   for (const m of c.mecedoras) dib(m.x, m.y, sprs.mecedora, 44, 58);
-  for (const l of c.lamparas) dib(l.x, l.y, sprs.lampara, 22, 60, 112);
-  dib(c.x0 + 40, c.y + 92, sprs.estandarte, 46, 130);
+  for (const l of c.lamparas) dib(l.x, l.y, sprs.lampara, 22, 60, 132);
+  dib(c.x0 + 40, c.y + 130, sprs.estandarte, 46, 130);
   for (const v of c.ventanillas) { dib(c.xk - 6, v.y, sprs.letreros[v.idx], 64, 15, 98); dib(c.xk - 22, v.y, sprs.letreros[v.idx], 44, 10, 43); }
   cosas.sort((a, b) => b.d - a.d);
   for (const it of cosas) {
