@@ -1,6 +1,7 @@
 // Mini tutorial al empezar (unos 30 segundos): tres pasos cortos que avanzan cuando los haces.
-// Se puede saltar (Enter o el botón "Saltar") y se recuerda si ya lo viste (localStorage 'scout_tutorial_visto').
-const TUTO_KEY = 'scout_tutorial_visto';
+// Se puede saltar (Enter o el botón "Saltar"). Si ya lo viste, en las siguientes partidas ya no sale,
+// pero al recargar la página sale otra vez (se recuerda solo en memoria).
+let tuto_ya_visto = false;
 const TUTO_PASOS = [
   () => 'Abre tu pasaporte con ' + tecla_entre_corchetes('mapa') + ' para ver el mapa del bosque.',
   () => 'La brújula de arriba a la derecha te dice hacia dónde miras. Gira un poco para ver cómo se mueve.',
@@ -8,13 +9,12 @@ const TUTO_PASOS = [
 ];
 let tuto = null, tuto_saltar = null; // tuto: { paso, giro, ang, madera } o null; tuto_saltar: dónde está el botón
 
-function tuto_visto() { try { return localStorage.getItem(TUTO_KEY) === '1'; } catch (_) { return false; } }
 function tuto_terminar(saltado) {
   tuto = null;
-  try { localStorage.setItem(TUTO_KEY, '1'); } catch (_) { /* sin localStorage: se vuelve a mostrar la próxima vez */ }
+  tuto_ya_visto = true;
   if (!saltado) toast('¡Listo! Ahora prende la fogata: acércate y presiona ' + tecla_entre_corchetes('usar') + '.', 6);
 }
-function tuto_empezar() { tuto = tuto_visto() ? null : { paso: 0, giro: 0, ang: player.ang, madera: wood }; }
+function tuto_empezar() { tuto = tuto_ya_visto ? null : { paso: 0, giro: 0, ang: player.ang, madera: wood }; }
 
 // Cada cuadro de juego (antes de las ventanitas, para enterarse de que abriste el pasaporte)
 function tuto_actualizar() {
