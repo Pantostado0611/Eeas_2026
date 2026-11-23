@@ -19,8 +19,8 @@ const TOL_STEPS = 5;       // margen permitido al marcar en la libreta (pasos)
 const TOL_DEG = 15;        // margen permitido al marcar en la libreta (grados)
 // Modalidades: cuánto dura un día completo (en segundos reales)
 const MODOS = [
-  { name: 'Express', dia: 600, desc: 'Días de 10 minutos' },
-  { name: 'Relajada', dia: 1200, desc: 'Días de 20 minutos' },
+  { name: 'Express', dia: 1200, desc: 'Días de 20 minutos' },
+  { name: 'Relajada', dia: 2400, desc: 'Días de 40 minutos' },
 ];
 const dia_len = () => MODOS[settings.modo].dia;
 const FOV = 1.6;           // ángulo de visión (radianes, ~92°)
